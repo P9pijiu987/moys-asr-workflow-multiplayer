@@ -173,6 +173,8 @@
     } else {
       multi.tracks = [track, ...(multi.tracks || []).filter((candidate) => candidate.id !== trackId)];
     }
+    // [multiplayer] 多人模式下导入为轨 3：不自动建立双语绑定。
+    if (window.MaweMultiplayer?.isEnabled()) match.matches.length = 0;
     match.matches.forEach((candidate) => {
       const main = MaweBoot.DATA.segments[candidate.mainIndex];
       const extension = extensionSegments[candidate.extensionIndex];

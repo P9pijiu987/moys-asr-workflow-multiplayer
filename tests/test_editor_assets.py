@@ -226,6 +226,7 @@ class EditorAssetContractTests(CompactContainerAssertions, unittest.TestCase):
                 "editor/io/editor-wiring-file-drop.js",
                 # [multiplayer]
                 "editor/multiplayer/mp-state.js",
+                "editor/multiplayer/mp-tracks.js",
                 "editor/multiplayer/mp-shortcuts.js",
                 "editor/multiplayer/mp-groups-panel.js",
                 "editor/boot/editor-startup.js",

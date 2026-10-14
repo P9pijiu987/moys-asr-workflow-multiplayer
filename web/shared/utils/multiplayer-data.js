@@ -3,7 +3,7 @@
 // 分组解析与拆分/合并后的 cue 表对账规则。工程数据只放在顶层 `multiplayer`。
 export function createUtilsModule(dependencies) {
   'use strict';
-  const { ASS_DEFAULT_ASS_STYLE, cloneJsonValue, effectiveColorName, normalizeAssStyle, stableId } = dependencies;
+  const { ASS_DEFAULT_ASS_STYLE, cloneJsonValue, effectiveColorName, normalizeAssStyle, stableId, uniqueStableSegmentId } = dependencies;
 
   const MULTIPLAYER_SCHEMA = 'maw.multiplayer.v1';
 
@@ -327,6 +327,108 @@ export function createUtilsModule(dependencies) {
     return changed ? next : source;
   }
 
+  // 在三条多人轨之间移动字幕（原地修改 tracks 中的数组）：
+  // - 目标轨保持按 start 升序且互不重叠；任一冲突则整体放弃，不做部分移动；
+  // - 颜色 / 表情包 ref 只能引用所在数组：被移走段的 ref 物化为自持 head，
+  //   留下的组成员按原 head 的对象身份重新定位，head 被移走时由组内首个成员接任；
+  // - 移入副轨（轨 3）的段不携带表情包；目标轨 id 冲突时改用不重复的新 id。
+  // 返回 { ok, reason?, conflictId?, moved: [{ from, to, id, newId }] }。
+  function moveMultiplayerSegments(tracks, targets, targetTrack) {
+    if (!MULTIPLAYER_TRACK_KEYS.includes(targetTrack) || !Array.isArray(tracks?.[targetTrack])) {
+      return { ok: false, reason: 'invalid-target', moved: [] };
+    }
+    const lists = Object.fromEntries(MULTIPLAYER_TRACK_KEYS.map((track) => [track, Array.isArray(tracks?.[track]) ? tracks[track] : []]));
+    const moving = [];
+    const seen = new Set();
+    (Array.isArray(targets) ? targets : []).forEach(({ track, id }) => {
+      if (track === targetTrack || !lists[track]) return;
+      const segment = lists[track].find((item) => stableId(item?.id) === stableId(id));
+      if (segment && !seen.has(segment)) {
+        seen.add(segment);
+        moving.push({ track, segment });
+      }
+    });
+    if (!moving.length) return { ok: false, reason: 'nothing', moved: [] };
+    const candidates = [...lists[targetTrack].map((segment) => ({ segment, moving: false })),
+      ...moving.map(({ segment }) => ({ segment, moving: true }))]
+      .sort((left, right) => Number(left.segment.start) - Number(right.segment.start));
+    for (let index = 1; index < candidates.length; index += 1) {
+      const previous = candidates[index - 1];
+      const current = candidates[index];
+      if ((previous.moving || current.moving) && Number(previous.segment.end) > Number(current.segment.start)) {
+        return { ok: false, reason: 'overlap', conflictId: (current.moving ? current : previous).segment.id, moved: [] };
+      }
+    }
+    // 记录编辑前每个组成员指向的 head 对象。
+    const groupFields = [['color', 'color_ref'], ['sticker', 'sticker_ref']];
+    const headOf = new Map(groupFields.map(([, refField]) => [refField, new Map()]));
+    MULTIPLAYER_TRACK_KEYS.forEach((track) => {
+      lists[track].forEach((segment) => {
+        groupFields.forEach(([headField, refField]) => {
+          const headIdx = segment?.[refField]?.headIdx;
+          const head = Number.isInteger(headIdx) ? lists[track][headIdx] : null;
+          if (head?.[headField]) headOf.get(refField).set(segment, head);
+        });
+      });
+    });
+    const movingSet = new Set(moving.map(({ segment }) => segment));
+    moving.forEach(({ segment }) => {
+      const colorHead = headOf.get('color_ref').get(segment);
+      if (colorHead && !segment.color) {
+        segment.color = { ...cloneJsonValue(colorHead.color), start: segment.start, end: segment.end };
+      }
+      segment.color_ref = null;
+      segment.sticker_ref = null;
+      if (targetTrack === 'extension') segment.sticker = null;
+    });
+    MULTIPLAYER_TRACK_KEYS.forEach((track) => {
+      if (track === targetTrack) return;
+      for (let index = lists[track].length - 1; index >= 0; index -= 1) {
+        if (movingSet.has(lists[track][index])) lists[track].splice(index, 1);
+      }
+    });
+    const moved = [];
+    moving.forEach(({ track, segment }) => {
+      const target = lists[targetTrack];
+      const oldId = stableId(segment.id);
+      if (target.some((item) => stableId(item?.id) === oldId)) segment.id = uniqueStableSegmentId(target, oldId, targetTrack);
+      let insertAt = target.length;
+      for (let index = 0; index < target.length; index += 1) {
+        if (Number(target[index].start) > Number(segment.start)) { insertAt = index; break; }
+      }
+      target.splice(insertAt, 0, segment);
+      moved.push({ from: track, to: targetTrack, id: oldId, newId: segment.id });
+    });
+    // 按 head 对象身份重新定位留下的组成员；head 已移走时由组内首个成员接任。
+    MULTIPLAYER_TRACK_KEYS.forEach((track) => {
+      const list = lists[track];
+      const indexOf = new Map(list.map((segment, index) => [segment, index]));
+      groupFields.forEach(([headField, refField]) => {
+        const refs = headOf.get(refField);
+        const orphanGroups = new Map();
+        list.forEach((segment, index) => {
+          if (movingSet.has(segment) || !segment[refField]) return;
+          const head = refs.get(segment);
+          if (!head) return;
+          if (indexOf.has(head)) segment[refField].headIdx = indexOf.get(head);
+          else {
+            if (!orphanGroups.has(head)) orphanGroups.set(head, []);
+            orphanGroups.get(head).push(index);
+          }
+        });
+        orphanGroups.forEach((members, head) => {
+          const [first, ...rest] = members;
+          const leader = list[first];
+          const last = list[members[members.length - 1]];
+          leader[headField] = { ...cloneJsonValue(head[headField]), start: leader.start, end: last.end };
+          leader[refField] = null;
+          rest.forEach((index) => { list[index][refField] = { ...list[index][refField], headIdx: first }; });
+        });
+      });
+    });
+    return { ok: true, moved };
+  }
+
   return Object.freeze({
     MULTIPLAYER_DEFAULT_COLOR_MAP,
     MULTIPLAYER_DEFAULT_GROUP_COLORS,
@@ -345,6 +447,7 @@ export function createUtilsModule(dependencies) {
     multiplayerGroupId,
     multiplayerGroupIndex,
     multiplayerGroupIndexForKey,
+    moveMultiplayerSegments,
     normalizeMultiplayer,
     parseMultiplayerCueKey,
     reconcileMultiplayerCues,

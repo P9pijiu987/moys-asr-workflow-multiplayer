@@ -15,6 +15,10 @@
     content: attr(data-mp-key); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     color: #111; font-size: 11px; font-weight: 700; line-height: 1;
   }
+  .multi-cue-column[data-mp-group] { box-shadow: inset 4px 0 0 var(--mp-group-color); }
+  .mp-group-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; margin-right: 6px;
+    padding: 0 3px; border-radius: 3px; color: #111; background: var(--mp-group-color, #777); font-size: 11px; font-weight: 700; }
+  .multi-cue-column[data-mp-group] .mp-group-chip { background: var(--mp-group-color); }
   .mp-project-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .mp-project-actions button { min-height: var(--control-h, 28px); padding: 4px 10px; font-size: 12px; cursor: pointer;
     color: var(--text-secondary); background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm, 4px); }

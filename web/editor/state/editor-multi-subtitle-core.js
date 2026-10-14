@@ -213,6 +213,7 @@
 
   function addSubtitleBinding(mainSegment, extensionSegment, track = getActiveExtensionTrack()) {
     if (!mainSegment || !extensionSegment || !track) return null;
+    if (window.MaweMultiplayer?.isEnabled()) return null; // [multiplayer] 轨 3 不与主轨绑定
     const multi = getMultiSubtitleState();
     removeBindingsForSegmentIds([mainSegment.id], [extensionSegment.id]);
     const binding = window.AsrEditorUtils.buildSubtitleBinding(mainSegment, extensionSegment, track.id);

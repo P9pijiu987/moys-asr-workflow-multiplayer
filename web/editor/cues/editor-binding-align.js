@@ -85,6 +85,7 @@
   function beginPendingExtensionBinding(index, track = MaweMultiSubtitleCore.getActiveExtensionTrack()) {
     const extension = track?.segments?.[index];
     if (!extension || !track) return;
+    if (window.MaweMultiplayer?.blockBinding()) return; // [multiplayer]
     const overlapping = overlappingMainIndexesForExtension(extension);
     const unbound = overlapping.filter((mainIndex) => !MaweMultiSubtitleCore.bindingForMainIndex(mainIndex));
     if (unbound.length) {
@@ -114,6 +115,7 @@
 
   function bindSelectedSubtitlePair({ successMessage = null } = {}) {
   if (!MaweMultiSubtitleCore.multiSubtitleVisible()) return;
+  if (window.MaweMultiplayer?.blockBinding()) return; // [multiplayer]
   if (MaweSelection.selectedIdxs.size !== 1 || MaweSelection.selectedExtensionIdxs.size !== 1) {
     MaweHint.flashHint('请分别选中一条主字幕和一条副字幕后再绑定', 'invalid');
     return;

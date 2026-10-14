@@ -137,6 +137,8 @@ export interface WaveformOptions {
   multiSubtitleVisible?(): boolean;
   showTrackBadges?(): boolean;
   getOverlayCreateEnabled?(): boolean;
+  /** [multiplayer] 多人模式下主字幕格上方一格作为轨 2（叠加轨）命中区。 */
+  overlayLaneActive?(): boolean;
   getHideDisabled?(): boolean;
   getSnapToFrame?(): boolean;
   getHoverSeekPreview?(): boolean;

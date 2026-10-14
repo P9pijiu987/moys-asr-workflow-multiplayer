@@ -205,7 +205,11 @@ export function createWaveformModule(dependencies) {
           ? markerLaneHeight
           : Math.min(35, Math.max(0, (rowRect.height - bottomInset * 2) / 2));
       const extensionTop = rowRect.height - bottomInset - laneHeight;
-      return clientY - rowRect.top >= extensionTop ? 'extension' : 'main';
+      const offsetY = clientY - rowRect.top;
+      if (offsetY >= extensionTop) return 'extension';
+      // [multiplayer] 多人模式下主字幕格上方一格是轨 2（叠加轨）。
+      if (this.options.overlayLaneActive?.() === true && offsetY < extensionTop - laneHeight) return 'overlay';
+      return 'main';
     }
 
 

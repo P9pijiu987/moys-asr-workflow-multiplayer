@@ -139,3 +139,66 @@ test('trackSegmentsFromProject maps the three borrowed arrays (scheme A)', () =>
   assert.deepEqual(plain(tracks), { main: [{ id: 'm' }], overlay: [{ id: 'o' }], extension: [{ id: 'e' }] });
   assert.deepEqual(plain(m.trackSegmentsFromProject({})), { main: [], overlay: [], extension: [] });
 });
+
+test('moving cues across tracks keeps group references valid in every array', () => {
+  const color = (name, start, end) => ({ name, value: '#f07f6f', start, end });
+  const tracks = {
+    main: [
+      { id: 'm1', start: 0, end: 1000, color: color('red', 0, 3000), sticker: { name: 's' } },
+      { id: 'm2', start: 1000, end: 2000, color_ref: { name: 'red', headIdx: 0 }, sticker_ref: { name: 's', headIdx: 0 } },
+      { id: 'm3', start: 2000, end: 3000, color_ref: { name: 'red', headIdx: 0 } },
+    ],
+    overlay: [
+      { id: 'o1', start: 5000, end: 6000, color: color('blue', 5000, 7000) },
+      { id: 'o2', start: 6000, end: 7000, color_ref: { name: 'blue', headIdx: 0 } },
+    ],
+    extension: [],
+  };
+  // 移走组 head m1：m2 接任 head，m3 改指向新的下标。
+  const result = m.moveMultiplayerSegments(tracks, [{ track: 'main', id: 'm1' }], 'overlay');
+  assert.equal(result.ok, true);
+  assert.deepEqual(plain(tracks.main.map((s) => s.id)), ['m2', 'm3']);
+  assert.equal(tracks.main[0].color.name, 'red');
+  assert.equal(tracks.main[0].color.start, 1000);
+  assert.equal(tracks.main[0].color.end, 3000);
+  assert.equal(tracks.main[0].color_ref, null);
+  assert.equal(tracks.main[0].sticker.name, 's');
+  assert.equal(tracks.main[1].color_ref.headIdx, 0);
+  // 目标轨插入在前，原有 ref 的 headIdx 随之后移。
+  assert.deepEqual(plain(tracks.overlay.map((s) => s.id)), ['m1', 'o1', 'o2']);
+  assert.equal(tracks.overlay[2].color_ref.headIdx, 1);
+});
+
+test('moved ref members become self-owned heads; extension drops stickers; ids stay unique', () => {
+  const tracks = {
+    main: [
+      { id: 'x', start: 0, end: 1000, color: { name: 'green', value: '#66bb6a', start: 0, end: 2000 } },
+      { id: 'dup', start: 1000, end: 2000, color_ref: { name: 'green', headIdx: 0 }, sticker: { name: 'fox' } },
+    ],
+    overlay: [],
+    extension: [{ id: 'dup', start: 5000, end: 6000 }],
+  };
+  const result = m.moveMultiplayerSegments(tracks, [{ track: 'main', id: 'dup' }], 'extension');
+  assert.equal(result.ok, true);
+  const moved = tracks.extension[0];
+  assert.equal(moved.start, 1000);
+  assert.deepEqual(plain(moved.color), { name: 'green', value: '#66bb6a', start: 1000, end: 2000 });
+  assert.equal(moved.color_ref, null);
+  assert.equal(moved.sticker, null);
+  assert.notEqual(moved.id, 'dup');
+  assert.deepEqual(plain(result.moved), [{ from: 'main', to: 'extension', id: 'dup', newId: moved.id }]);
+});
+
+test('an overlapping move is rejected without touching any track', () => {
+  const tracks = {
+    main: [{ id: 'a', start: 0, end: 2000 }],
+    overlay: [{ id: 'b', start: 1500, end: 2500 }],
+    extension: [],
+  };
+  const before = JSON.stringify(tracks);
+  const result = m.moveMultiplayerSegments(tracks, [{ track: 'overlay', id: 'b' }], 'main');
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'overlap');
+  assert.equal(JSON.stringify(tracks), before);
+  assert.equal(m.moveMultiplayerSegments(tracks, [{ track: 'main', id: 'a' }], 'main').reason, 'nothing');
+});

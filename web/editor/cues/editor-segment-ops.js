@@ -30,7 +30,8 @@
       return Number.isFinite(overlapStart) && Number.isFinite(overlapEnd)
         && overlapEnd - overlapStart >= MaweMultiSubtitleCore.MULTI_SUBTITLE_MERGE_OVERLAP_TOLERANCE_MS;
     };
-    const extensionMergeIndices = extensionTrack
+    // [multiplayer] 多人模式下副轨是独立的轨 3，主轨合并不连带合并它。
+    const extensionMergeIndices = extensionTrack && !window.MaweMultiplayer?.isEnabled()
       ? extensionTrack.segments.map((segment, index) => ({ segment, index }))
         .filter(({ segment }) => boundExtensionIds.has(segment.id)
           || hasMeaningfulExtensionOverlap(segment))

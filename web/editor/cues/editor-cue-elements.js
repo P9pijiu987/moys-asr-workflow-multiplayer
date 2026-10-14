@@ -218,6 +218,7 @@
     }
     column.dataset.start = String(segment.start);
     column.dataset.end = String(segment.end);
+    window.MaweMultiplayer?.decorateCueColumn(column, segment, kind); // [multiplayer] 双列视图的轨道与分组标识
     return column;
   }
 

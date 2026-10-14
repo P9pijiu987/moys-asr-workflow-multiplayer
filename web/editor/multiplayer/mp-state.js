@@ -73,7 +73,7 @@
   }
 
   // 一次可撤销的多人数据修改；mutate 接收可写副本，返回 false 表示放弃。
-  function mutate(label, mutateCopy, { cueList = true } = {}) {
+  function mutate(label, mutateCopy, { cueList = true, waveform = 'overlay' } = {}) {
     if (!supported()) {
       MaweHint.flashHint('工程中的多人联机数据来自更新的版本，当前版本只读保留', 'warning');
       return false;
@@ -85,27 +85,57 @@
       if (mutateCopy(next) === false) return;
       setRawData(utils.normalizeMultiplayer(next));
       applied = true;
-    }, { invalidate: { cueList, preview: 'refresh' } });
+    }, { invalidate: { cueList, waveform, preview: 'refresh' } });
     return applied;
   }
 
+  // 方案甲：轨 2 = 叠加轨、轨 3 = 副轨。开启时打开这两条上游轨道的开关并记下原值，
+  // 关闭时恢复，保证关闭多人模式后上游的叠加轨 / 双语开关回到开启前的状态。
   function setEnabled(enabled) {
     if (enabled === isEnabled()) return true;
+    const multi = MaweMultiSubtitleCore.getMultiSubtitleState();
+    const bindingCount = enabled ? (multi.bindings || []).length : 0;
+    if (bindingCount && !confirm(`开启多人联机会解除 ${bindingCount} 组双语绑定，副字幕将作为「轨 3」独立使用（可撤销）。继续吗？`)) {
+      return false;
+    }
+    const overlay = typeof getOverlayTrack === 'function' ? getOverlayTrack() : MaweBoot.DATA.overlay_track;
     const ok = mutate(enabled ? '开启多人联机模式' : '关闭多人联机模式', (next) => {
       next.enabled = enabled === true;
+      if (enabled) {
+        if (!next.track_flags_before) {
+          next.track_flags_before = { multi_subtitle_enabled: multi.enabled === true, overlay_enabled: overlay?.enabled === true };
+        }
+        multi.bindings = [];
+        multi.enabled = true;
+        MaweMultiSubtitleCore.ensureEmptyExtensionTrack(multi);
+        multi._dirty = true;
+        if (overlay) overlay.enabled = true;
+      } else if (next.track_flags_before) {
+        multi.enabled = next.track_flags_before.multi_subtitle_enabled === true;
+        if (overlay) overlay.enabled = next.track_flags_before.overlay_enabled === true;
+        multi._dirty = true;
+        delete next.track_flags_before;
+      }
       if (enabled && !Object.keys(next.speaker_map || {}).length) {
         const result = utils.autoAssignMultiplayerSpeakers(next.speaker_map,
           Object.values(utils.trackSegmentsFromProject(MaweBoot.DATA)));
         next.speaker_map = result.speaker_map;
         if (result.overflow) MaweHint.flashHint(`识别到超过 12 位说话人，其余 ${result.overflow} 位使用第 1 组`, 'warning');
       }
-    });
+    }, { waveform: 'full' });
     if (!ok) return false;
     // D6：槽位与头像只有 ASS Canvas 路径能与导出保持一致，开启时自动打开 ASS 字幕模式。
     if (enabled && MaweSettings.EDITOR_SETTINGS.assMode !== true) {
       if (typeof assModeToggle !== 'undefined' && assModeToggle && !assModeToggle.checked) assModeToggle.click();
     }
     MaweHint.flashHint(enabled ? '已开启多人联机模式：1–9、0、-、= 为选中字幕分配分组' : '已关闭多人联机模式，数据仍保留在工程中', 'success');
+    return true;
+  }
+
+  // 多人模式下轨 3（副轨）独立使用，所有建立双语绑定的入口都由此拦截。
+  function blockBinding() {
+    if (!isEnabled()) return false;
+    MaweHint.flashHint('多人联机模式下轨 3 不与主字幕绑定；如需双语绑定请先关闭多人联机', 'warning');
     return true;
   }
 
@@ -224,6 +254,21 @@
     setRawData({ ...rawData(), cues });
   }
 
+  // 轨间移动时目标轨 id 冲突被改名：把 cue 表条目迁到新键（在调用方的命令内执行）。
+  function moveCueEntries(moves) {
+    const current = rawData();
+    if (!current || !Array.isArray(moves) || !moves.length) return;
+    const cues = { ...(current.cues || {}) };
+    moves.forEach(({ from, to, id, newId }) => {
+      const oldKey = utils.multiplayerCueKey(from, id);
+      const newKey = utils.multiplayerCueKey(to, newId);
+      if (!oldKey || !newKey || !cues[oldKey]) return;
+      cues[newKey] = cues[oldKey];
+      delete cues[oldKey];
+    });
+    setRawData({ ...current, cues });
+  }
+
   // 撤销快照：字段缺失时为 null，恢复时同样删除字段。
   function historySnapshot() {
     return clone(rawData());
@@ -279,6 +324,30 @@
     colorBar.title = `分组 ${index + 1}：${current.name}${current.speaker ? `（${current.speaker}）` : ''}`;
   }
 
+  // 双列字幕列表（主轨 / 副轨并排）没有颜色条：多人模式下用左侧色带和
+  // 分组按键标识，并把「主字幕 / 副字幕」改称轨道名。
+  function decorateCueColumn(column, segment, kind) {
+    if (!column || !segment || !isEnabled()) return;
+    const track = kind === 'extension' ? 'extension' : 'main';
+    const index = cueGroupIndex(track, segment);
+    const current = data().groups[index];
+    column.dataset.mpGroup = current.id;
+    column.style.setProperty('--mp-group-color', current.style.primaryColor);
+    const header = column.querySelector(':scope > .multi-cue-column-header');
+    const indexEl = header?.querySelector(':scope > .index');
+    if (indexEl) {
+      const label = data().tracks?.[track]?.label || (track === 'main' ? '轨 1' : '轨 3');
+      indexEl.textContent = indexEl.textContent.replace(/^(主字幕|副字幕)/u, label);
+    }
+    if (header && !header.querySelector(':scope > .mp-group-chip')) {
+      const chip = document.createElement('span');
+      chip.className = 'mp-group-chip';
+      chip.textContent = utils.MULTIPLAYER_GROUP_KEYS[index];
+      chip.title = `分组 ${index + 1}：${current.name}${current.speaker ? `（${current.speaker}）` : ''}`;
+      header.prepend(chip);
+    }
+  }
+
   global.MaweMultiplayer = Object.freeze({
     utils,
     rawData,
@@ -290,6 +359,7 @@
     mutate,
     setEnabled,
     autoAssignSpeakers,
+    blockBinding,
     selectedTargets,
     assignGroupToSelection,
     clearGroupOnSelection,
@@ -301,10 +371,12 @@
     copyGroupStyle,
     loadGroupStyleFromLibrary,
     afterSegmentsCommand,
+    moveCueEntries,
     historySnapshot,
     restoreSnapshot,
     exportContext,
     cueGroupIndex,
     decorateCueElement,
+    decorateCueColumn,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

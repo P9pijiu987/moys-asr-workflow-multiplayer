@@ -40,4 +40,19 @@
     if (event.repeat) return;
     multiplayer.assignGroupToSelection(groupIndex);
   }, true);
+
+  // Alt+1/2/3：把选中字幕移动到轨 1 / 轨 2 / 轨 3（主轨 / 叠加轨 / 副轨）。
+  // 用 event.code 判断数字键，避免 macOS 上 Option+数字产生特殊字符。
+  document.addEventListener('keydown', (event) => {
+    const multiplayer = global.MaweMultiplayer;
+    if (!multiplayer?.isEnabled() || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const match = /^(?:Digit|Numpad)([123])$/u.exec(event.code || '');
+    if (!match) return;
+    if (MaweInlineEdit.editingState || MaweInlineEdit.extensionEditingState) return;
+    if (isBlockedTarget() || modalOpen() || !hasSelection()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.repeat) return;
+    global.MaweMultiplayerTracks?.moveSelectionToTrack(['main', 'overlay', 'extension'][Number(match[1]) - 1]);
+  }, true);
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -169,6 +169,7 @@
     // 叠加轨启用（勾选「叠加字幕」）时，主轨占用位置按 Ctrl(Cmd)+拖动可
     // 直接创建叠加字幕；由波形侧改道创建轨道，这里只提供开关状态。
     getOverlayCreateEnabled: () => getOverlayTrack()?.enabled === true,
+    overlayLaneActive: () => window.MaweMultiplayer?.isEnabled() === true, // [multiplayer] 轨 2 独立一格
     onCueCreateRejected: (reason) => {
       if (reason === 'too-short') MaweHint.flashHint('该空白区域不足 100ms，无法新增字幕', 'warning');
       if (reason === 'occupied') MaweHint.flashHint('该位置已有字幕，无法新增字幕', 'warning');

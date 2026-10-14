@@ -50,6 +50,7 @@ const project = {
   waveform: generateWaveformPayload(4000),
 };
 
+const mainColumn = (page, index) => page.locator(`.multi-cue-column.main[data-main-idx="${index}"]`);
 const assStyleOf = (ass, text) => ass.split('\n').find((line) => line.startsWith('Dialogue:') && line.endsWith(text))?.split(',')[3];
 
 test('multiplayer mode assigns 12 groups by key, exports MPxx styles and stays upstream-identical when off', async ({ page }) => {
@@ -68,21 +69,22 @@ test('multiplayer mode assigns 12 groups by key, exports MPxx styles and stays u
   await expect(toggle).toBeVisible();
   await toggle.check();
   await closeSettingsPanels(page);
-  await expect(page.locator('.cue[data-mp-group]')).toHaveCount(3);
+  // 开启后轨 3（副轨）显示，列表切到双列视图：分组标识挂在主轨列上。
+  await expect(page.locator('.multi-cue-column[data-mp-group]')).toHaveCount(3);
   expect(await page.evaluate(() => MaweSettings.EDITOR_SETTINGS.assMode)).toBe(true);
   // 说话人 A/B 按出现顺序分到第 1、2 组；红色字幕映射到第 3 组。
-  await expect(page.locator('.cue[data-idx="0"]')).toHaveAttribute('data-mp-group', 'g01');
-  await expect(page.locator('.cue[data-idx="1"]')).toHaveAttribute('data-mp-group', 'g02');
-  await expect(page.locator('.cue[data-idx="2"]')).toHaveAttribute('data-mp-group', 'g03');
+  await expect(mainColumn(page, 0)).toHaveAttribute('data-mp-group', 'g01');
+  await expect(mainColumn(page, 1)).toHaveAttribute('data-mp-group', 'g02');
+  await expect(mainColumn(page, 2)).toHaveAttribute('data-mp-group', 'g03');
 
   await page.evaluate(() => { document.activeElement?.blur(); MaweSelection.selectOnly(0); });
   await page.keyboard.press('=');
-  await expect(page.locator('.cue[data-idx="0"]')).toHaveAttribute('data-mp-group', 'g12');
+  await expect(mainColumn(page, 0)).toHaveAttribute('data-mp-group', 'g12');
   await page.keyboard.press('-');
-  await expect(page.locator('.cue[data-idx="0"]')).toHaveAttribute('data-mp-group', 'g11');
+  await expect(mainColumn(page, 0)).toHaveAttribute('data-mp-group', 'g11');
   // 多人模式下 1 键是分组，不再写入颜色。
   await page.keyboard.press('1');
-  await expect(page.locator('.cue[data-idx="0"]')).toHaveAttribute('data-mp-group', 'g01');
+  await expect(mainColumn(page, 0)).toHaveAttribute('data-mp-group', 'g01');
   expect(await page.evaluate(() => MaweBoot.DATA.segments[0].color ?? null)).toBeNull();
   await page.keyboard.press('7');
 
@@ -93,7 +95,7 @@ test('multiplayer mode assigns 12 groups by key, exports MPxx styles and stays u
 
   // 撤销一次回到上一个分组。
   await page.keyboard.press('Control+z');
-  await expect(page.locator('.cue[data-idx="0"]')).toHaveAttribute('data-mp-group', 'g01');
+  await expect(mainColumn(page, 0)).toHaveAttribute('data-mp-group', 'g01');
 
   // 样式库窗口中的分组：改说话人后导出事件 Name 跟随。
   await page.evaluate(() => MaweMultiplayerGroupsPanel.openGroupStyles('g03'));
@@ -111,7 +113,7 @@ test('multiplayer mode assigns 12 groups by key, exports MPxx styles and stays u
   await openSettingsPage(page, 'project-tracks');
   await toggle.uncheck();
   await closeSettingsPanels(page);
-  await expect(page.locator('.cue[data-mp-group]')).toHaveCount(0);
+  await expect(page.locator('[data-mp-group]')).toHaveCount(0);
   expect(await page.evaluate(() => MaweMultiplayer.data().groups[2].speaker)).toBe('红队');
   expect(await page.evaluate(() => MaweExportSrt.buildAss())).toBe(offAss);
   await page.evaluate(() => { document.activeElement?.blur(); MaweSelection.selectOnly(1); });
