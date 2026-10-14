@@ -47,6 +47,17 @@ class MultiplayerProjectTests(unittest.TestCase):
                 self.assertTrue(result.ok, result.errors)
                 self.assertEqual(result.project["multiplayer"], value)
 
+    def test_avatar_fields_round_trip_unchanged(self) -> None:
+        data = {
+            "enabled": True,
+            "avatar_defaults": {"position": "top", "shadow": {"enabled": True, "blur": 8}},
+            "groups": [{"id": "g01", "avatar": "av-1", "avatar_style": {"position": "right"}}],
+            "assets": {"av-1": {"mime": "image/png", "width": 8, "height": 8, "data": "iVBORw0KGgo="}},
+        }
+        normalized = normalize_project(_project(multiplayer=copy.deepcopy(data)))["multiplayer"]
+        for key in ("avatar_defaults", "groups", "assets"):
+            self.assertEqual(normalized[key], data[key])
+
     def test_enabled_helper(self) -> None:
         self.assertFalse(multiplayer_enabled(_project()))
         self.assertFalse(multiplayer_enabled(_project(multiplayer={"enabled": "true"})))

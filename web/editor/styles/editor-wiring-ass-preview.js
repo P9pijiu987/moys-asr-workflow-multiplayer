@@ -314,7 +314,11 @@ function applyAssSubtitlePreview({ tMs, overlaySegments }) {
       nativeFontSize: Math.max(1, animated.fontSize * scale), alignment: item.alignment,
       anchor: item.anchor || null, margins: { left: item.style.marginL, right: item.style.marginR, vertical: item.style.marginV } };
   });
-  window.MaweAssCanvas?.render({ playResX: metrics.resolution.width, playResY: metrics.resolution.height, tracks });
+  // [multiplayer] 头像落点来自同一份排版计划；淡入淡出跟随所属字幕。
+  const avatars = frame.items.filter(item => item.avatar).map(item => ({ ...item.avatar,
+    x: item.anchor.x + item.avatar.x, y: item.anchor.y + item.avatar.y,
+    fade: window.AsrEditorUtils.assStackAnimationState(profile, Number(tMs) - item.start, item.end - item.start, { fad: item.fad }).opacity ?? 1 }));
+  window.MaweAssCanvas?.render({ playResX: metrics.resolution.width, playResY: metrics.resolution.height, tracks, avatars });
 }
 
 function restoreAssOverlayTrackPreview() {

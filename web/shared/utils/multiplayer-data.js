@@ -41,6 +41,30 @@ export function createUtilsModule(dependencies) {
 
   const MULTIPLAYER_TEXT_MAX_LENGTH = 64;
 
+  // 头像样式：全局默认 + 分组覆盖。尺寸与间距按字号倍数，阴影距离与模糊按 1080p 像素
+  // （导出按 PlayResY 换算），与字号的分辨率规则一致。
+  const MULTIPLAYER_DEFAULT_AVATAR_STYLE = Object.freeze({
+    position: 'left',
+    gap_em: 0.25,
+    size_em: 1.2,
+    opacity: 100,
+    shape: 'circle',
+    radius: 0.2,
+    layer: 'above',
+    shadow: Object.freeze({ enabled: false, color: '#000000', opacity: 60, blur: 6, x: 0, y: 2 }),
+  });
+
+  const MULTIPLAYER_AVATAR_POSITIONS = Object.freeze(['left', 'right', 'top']);
+
+  const MULTIPLAYER_AVATAR_SHAPES = Object.freeze(['circle', 'rounded', 'square']);
+
+  const MULTIPLAYER_AVATAR_LAYERS = Object.freeze(['above', 'below']);
+
+  const MULTIPLAYER_AVATAR_MIMES = Object.freeze(['image/png', 'image/jpeg', 'image/webp']);
+
+  // 单张头像 base64 上限（约 1.5 MB 原始数据）；导入时会先缩放到 ≤512px。
+  const MULTIPLAYER_AVATAR_MAX_BASE64 = 2 * 1024 * 1024;
+
   const SLOT_ID_RE = /^[a-z][a-z0-9_-]{0,31}$/u;
 
   function isPlainObject(value) {
@@ -97,7 +121,8 @@ export function createUtilsModule(dependencies) {
       avatar: stableId(source.avatar) || null,
       style,
     };
-    if (source.avatar_style !== undefined && !isPlainObject(source.avatar_style)) delete group.avatar_style;
+    if (isPlainObject(source.avatar_style)) group.avatar_style = normalizeMultiplayerAvatarStyle(source.avatar_style, { partial: true });
+    else delete group.avatar_style;
     return group;
   }
 
@@ -165,6 +190,66 @@ export function createUtilsModule(dependencies) {
     return result;
   }
 
+  function clampNumber(value, fallback, min, max) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.min(max, Math.max(min, numeric)) : fallback;
+  }
+
+  function normalizeHexColor(value, fallback) {
+    const text = String(value ?? '').trim().toLowerCase();
+    return /^#[0-9a-f]{6}$/u.test(text) ? text : fallback;
+  }
+
+  // partial = true 时只保留合法的已给出字段（分组覆盖）；否则补齐为完整样式。
+  /** @param {{ partial?: boolean, fallback?: any }} [options] */
+  function normalizeMultiplayerAvatarStyle(value, options = {}) {
+    const { partial = false, fallback = MULTIPLAYER_DEFAULT_AVATAR_STYLE } = options;
+    const source = isPlainObject(value) ? value : {};
+    const base = fallback || MULTIPLAYER_DEFAULT_AVATAR_STYLE;
+    const result = {};
+    const take = (key, normalized) => {
+      if (partial && source[key] === undefined) return;
+      result[key] = normalized;
+    };
+    take('position', MULTIPLAYER_AVATAR_POSITIONS.includes(source.position) ? source.position : base.position);
+    take('gap_em', clampNumber(source.gap_em, base.gap_em, 0, 4));
+    take('size_em', clampNumber(source.size_em, base.size_em, 0.2, 6));
+    take('opacity', Math.round(clampNumber(source.opacity, base.opacity, 0, 100)));
+    take('shape', MULTIPLAYER_AVATAR_SHAPES.includes(source.shape) ? source.shape : base.shape);
+    take('radius', clampNumber(source.radius, base.radius, 0, 0.5));
+    take('layer', MULTIPLAYER_AVATAR_LAYERS.includes(source.layer) ? source.layer : base.layer);
+    if (!partial || source.shadow !== undefined) {
+      const shadow = isPlainObject(source.shadow) ? source.shadow : {};
+      const fallbackShadow = base.shadow || MULTIPLAYER_DEFAULT_AVATAR_STYLE.shadow;
+      result.shadow = {
+        enabled: typeof shadow.enabled === 'boolean' ? shadow.enabled : fallbackShadow.enabled,
+        color: normalizeHexColor(shadow.color, fallbackShadow.color),
+        opacity: Math.round(clampNumber(shadow.opacity, fallbackShadow.opacity, 0, 100)),
+        blur: clampNumber(shadow.blur, fallbackShadow.blur, 0, 100),
+        x: clampNumber(shadow.x, fallbackShadow.x, -200, 200),
+        y: clampNumber(shadow.y, fallbackShadow.y, -200, 200),
+      };
+    }
+    return result;
+  }
+
+  function normalizeMultiplayerAssets(value) {
+    const source = isPlainObject(value) ? value : {};
+    const result = {};
+    Object.entries(source).forEach(([id, raw]) => {
+      const key = stableId(id);
+      if (!key || !isPlainObject(raw)) return;
+      const data = typeof raw.data === 'string' ? raw.data.replace(/\s+/gu, '') : '';
+      if (!data || data.length > MULTIPLAYER_AVATAR_MAX_BASE64 || !/^[a-z0-9+/]+={0,2}$/iu.test(data)) return;
+      if (!MULTIPLAYER_AVATAR_MIMES.includes(raw.mime)) return;
+      const width = Math.round(Number(raw.width));
+      const height = Math.round(Number(raw.height));
+      if (!(width > 0 && height > 0 && width <= 4096 && height <= 4096)) return;
+      result[key] = { ...raw, mime: raw.mime, width, height, data };
+    });
+    return result;
+  }
+
   // 返回规范化后的新对象；未知子字段原样保留，越界值钳制而不是报错。
   // 无法识别的 schema 返回 null：调用方保留原对象、不启用模式。
   function normalizeMultiplayer(value) {
@@ -185,7 +270,28 @@ export function createUtilsModule(dependencies) {
       tracks: normalizeMultiplayerTracks(source.tracks, slots),
       slots,
       cues: normalizeMultiplayerCues(source.cues, slotIds),
+      avatar_defaults: normalizeMultiplayerAvatarStyle(source.avatar_defaults),
+      assets: normalizeMultiplayerAssets(source.assets),
     };
+  }
+
+  // 分组头像：分组引用了存在的资源时返回 { assetId, asset, style }，否则 null。
+  function resolveMultiplayerAvatar(data, groupIndex) {
+    const group = data?.groups?.[groupIndex];
+    const assetId = stableId(group?.avatar);
+    const asset = assetId ? data?.assets?.[assetId] : null;
+    if (!asset) return null;
+    const defaults = normalizeMultiplayerAvatarStyle(data.avatar_defaults);
+    const override = normalizeMultiplayerAvatarStyle(group.avatar_style, { partial: true, fallback: defaults });
+    const style = normalizeMultiplayerAvatarStyle({ ...defaults, ...override,
+      shadow: { ...defaults.shadow, ...(override.shadow || {}) } });
+    return { assetId, asset, style };
+  }
+
+  // 未被任何分组引用的头像资源 id。
+  function unusedMultiplayerAssets(data) {
+    const used = new Set((data?.groups || []).map((group) => stableId(group?.avatar)).filter(Boolean));
+    return Object.keys(data?.assets || {}).filter((id) => !used.has(id));
   }
 
   function multiplayerCueKey(track, segmentId) {
@@ -473,6 +579,10 @@ export function createUtilsModule(dependencies) {
   }
 
   return Object.freeze({
+    MULTIPLAYER_AVATAR_LAYERS,
+    MULTIPLAYER_AVATAR_POSITIONS,
+    MULTIPLAYER_AVATAR_SHAPES,
+    MULTIPLAYER_DEFAULT_AVATAR_STYLE,
     MULTIPLAYER_DEFAULT_COLOR_MAP,
     MULTIPLAYER_DEFAULT_GROUP_COLORS,
     MULTIPLAYER_DEFAULT_SLOTS,
@@ -492,6 +602,9 @@ export function createUtilsModule(dependencies) {
     multiplayerGroupIndexForKey,
     moveMultiplayerSegments,
     normalizeMultiplayer,
+    normalizeMultiplayerAvatarStyle,
+    resolveMultiplayerAvatar,
+    unusedMultiplayerAssets,
     parseMultiplayerCueKey,
     reconcileMultiplayerCues,
     resolveMultiplayerGroup,

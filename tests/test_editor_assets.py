@@ -231,6 +231,8 @@ class EditorAssetContractTests(CompactContainerAssertions, unittest.TestCase):
                 "editor/multiplayer/mp-placement.js",
                 "editor/multiplayer/mp-shortcuts.js",
                 "editor/multiplayer/mp-groups-panel.js",
+                "editor/multiplayer/mp-avatar-canvas.js",
+                "editor/multiplayer/mp-avatar-panel.js",
                 "editor/boot/editor-startup.js",
                 "editor/boot/editor-onboarding.js",
         ),

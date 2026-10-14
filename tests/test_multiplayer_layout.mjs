@@ -100,3 +100,66 @@ test('slot helpers order bottom-to-top and placement writes drop defaults', () =
   const cleared = m.setMultiplayerCuePlacement({ ...data, cues }, 'main', 'm', { slot: 'bottom', offset: { x: 0, y: 0 } });
   assert.deepEqual(plain(cleared), {});
 });
+
+const avatarData = (style = {}) => m.normalizeMultiplayer({
+  enabled: true,
+  groups: [{ name: 'A', avatar: 'av1', avatar_style: style }],
+  assets: { av1: { mime: 'image/png', width: 64, height: 64, data: 'iVBORw0KGgo=' } },
+});
+const avatarItem = (text = 'ABCD') => ({ ...item('main', 'm', 0, 1000, text), multiplayerGroup: 0 });
+const planWith = (data, items) => m.createMultiplayerLayoutPlan({ items, data, profile, width: 1000, height: 1000, measure });
+
+test('avatar on the left: whole box is centred and the text is left-anchored right after the gap', () => {
+  // 默认：头像 1.2 × 字号（60px），间距 0.25 × 字号（12.5px）；文字宽 4 × 50 = 200。
+  const result = planWith(avatarData({ position: 'left' }), [avatarItem()]);
+  const [entry] = h.assStackFrame(result, 500).items;
+  assert.equal(entry.alignment, 1);
+  const avatarLeft = entry.anchor.x + entry.avatar.x;
+  const avatarRight = avatarLeft + entry.avatar.size;
+  assert.equal(entry.avatar.size, 60);
+  assert.equal(entry.anchor.x - avatarRight, 12.5, 'gap between avatar and text is exact');
+  const boxCentre = (avatarLeft + entry.anchor.x + 200) / 2;
+  assert.equal(boxCentre, 500, 'avatar + gap + text is centred as one box');
+  // 头像与文字块垂直居中对齐（文字高 50，底边在槽位 920）。
+  assert.equal(entry.anchor.y + entry.avatar.y + 30, 920 - 25);
+  assert.equal(result.avatars.length, 1);
+  assert.equal(result.avatars[0].x, avatarLeft);
+});
+
+test('avatar on the right anchors the text by its right edge; avatar on top stacks above the text', () => {
+  const right = h.assStackFrame(planWith(avatarData({ position: 'right' }), [avatarItem()]), 500).items[0];
+  assert.equal(right.alignment, 3);
+  assert.equal(right.anchor.x + right.avatar.x - right.anchor.x, 12.5);
+  assert.equal(((right.anchor.x - 200) + (right.anchor.x + 12.5 + 60)) / 2, 500);
+  const top = h.assStackFrame(planWith(avatarData({ position: 'top', gap_em: 0.5 }), [avatarItem()]), 500).items[0];
+  assert.equal(top.alignment, 2);
+  assert.equal(top.anchor.x, 500);
+  assert.equal(top.anchor.y + top.avatar.y + top.avatar.size, 920 - 50 - 25);
+  assert.equal(top.anchor.x + top.avatar.x, 500 - 30);
+});
+
+test('avatar style resolves defaults with per-group overrides and scales shadows with resolution', () => {
+  const data = m.normalizeMultiplayer({
+    enabled: true,
+    avatar_defaults: { size_em: 2, layer: 'below', shadow: { enabled: true, blur: 10, x: 4, y: 4 } },
+    groups: [{ avatar: 'av1', avatar_style: { size_em: 1, shape: 'rounded', bogus: 1 } }],
+    assets: { av1: { mime: 'image/png', width: 8, height: 8, data: 'iVBORw0KGgo=' }, bad: { mime: 'text/plain', width: 1, height: 1, data: 'x' } },
+  });
+  assert.deepEqual(plain(Object.keys(data.assets)), ['av1']);
+  assert.deepEqual(plain(data.groups[0].avatar_style), { size_em: 1, shape: 'rounded' });
+  const resolved = m.resolveMultiplayerAvatar(data, 0);
+  assert.equal(resolved.style.size_em, 1);
+  assert.equal(resolved.style.layer, 'below');
+  assert.equal(resolved.style.shadow.blur, 10);
+  assert.equal(m.resolveMultiplayerAvatar(data, 1), null);
+  const big = m.createMultiplayerLayoutPlan({ items: [avatarItem()], data, profile, width: 1920, height: 2160, measure });
+  assert.equal(big.avatars[0].shadow.blur, 20);
+  assert.deepEqual(plain(m.unusedMultiplayerAssets({ ...data, groups: [] })), ['av1']);
+});
+
+test('the avatar is part of the hit box so dragging it moves the whole block', () => {
+  const result = planWith(avatarData({ position: 'left' }), [avatarItem()]);
+  const frame = h.assStackFrame(result, 500).items;
+  const avatar = result.avatars[0];
+  assert.equal(m.multiplayerHitTest(frame, avatar.x + 5, avatar.y + avatar.size / 2)?.segment.id, 'm');
+});

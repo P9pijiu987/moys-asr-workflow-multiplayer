@@ -68,8 +68,11 @@
     });
   }
 
+  // 可写副本：头像资源按引用沿用（资源只增不改），不随每次编辑深克隆。
   function workingCopy() {
-    return clone(data() || utils.normalizeMultiplayer({}));
+    const current = data() || utils.normalizeMultiplayer({});
+    const { assets, ...rest } = current;
+    return { ...clone(rest), assets: { ...(assets || {}) } };
   }
 
   // 一次可撤销的多人数据修改；mutate 接收可写副本，返回 false 表示放弃。
@@ -277,8 +280,24 @@
   }
 
   // 撤销快照：字段缺失时为 null，恢复时同样删除字段。
+  // 头像资源（base64）不进撤销快照与提交指纹：资源按 id 只增不改，会话内缓存一份，
+  // 撤销 / 重做恢复的快照引用旧 id 时从缓存补回，避免每次编辑都克隆数 MB 数据。
+  const assetCache = new Map();
+
+  function rememberAssets(value) {
+    Object.entries(value?.assets || {}).forEach(([id, asset]) => assetCache.set(id, asset));
+  }
+
+  function historyView() {
+    const raw = rawData();
+    if (!raw) return null;
+    rememberAssets(raw);
+    const { assets: _assets, ...rest } = raw;
+    return rest;
+  }
+
   function historySnapshot() {
-    return clone(rawData());
+    return clone(historyView());
   }
 
   function restoreSnapshot(value) {
@@ -287,7 +306,48 @@
       pendingStyleEdit.command.discard();
       pendingStyleEdit = null;
     }
-    setRawData(value == null ? null : clone(value));
+    if (value == null) {
+      rememberAssets(rawData());
+      setRawData(null);
+      return;
+    }
+    const restored = clone(value);
+    rememberAssets(rawData());
+    const assets = {};
+    (restored.groups || []).forEach((group) => {
+      const id = group?.avatar;
+      if (id && assetCache.has(id)) assets[id] = assetCache.get(id);
+    });
+    Object.entries(rawData()?.assets || {}).forEach(([id, asset]) => { assets[id] = asset; });
+    setRawData({ ...restored, assets });
+  }
+
+  // 头像窗口关闭时清理未被分组引用的资源（缓存仍保留，撤销可找回）。
+  function pruneUnusedAssets() {
+    const raw = rawData();
+    const current = data();
+    if (!raw || !current) return 0;
+    const unused = utils.unusedMultiplayerAssets(current);
+    if (!unused.length) return 0;
+    rememberAssets(raw);
+    const assets = { ...(raw.assets || {}) };
+    unused.forEach((id) => delete assets[id]);
+    setRawData({ ...raw, assets });
+    return unused.length;
+  }
+
+  // 新增头像资源：直接写入（资源本身不参与撤销），随后由分组引用它的命令记录撤销。
+  function addAsset(asset) {
+    const raw = rawData();
+    if (!raw || !asset?.data) return '';
+    const id = `av-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    assetCache.set(id, asset);
+    setRawData({ ...raw, assets: { ...(raw.assets || {}), [id]: asset } });
+    return id;
+  }
+
+  function asset(id) {
+    return data()?.assets?.[id] || assetCache.get(id) || null;
   }
 
   function exportContext() {
@@ -381,6 +441,10 @@
     moveCueEntries,
     writeCues,
     historySnapshot,
+    historyView,
+    pruneUnusedAssets,
+    addAsset,
+    asset,
     restoreSnapshot,
     exportContext,
     cueGroupIndex,

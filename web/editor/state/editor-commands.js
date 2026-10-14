@@ -50,7 +50,7 @@ window.MAWE.register('editor-commands', function createEditorCommands(dependenci
     segments: MaweState.project.segments,
     multi_subtitle: MaweState.project.multi_subtitle,
     overlay_track: MaweState.project.overlay_track,
-    multiplayer: window.MaweMultiplayer?.rawData() ?? null, // [multiplayer] 与历史快照同序同键
+    multiplayer: window.MaweMultiplayer?.historyView() ?? null, // [multiplayer] 与历史快照同序同键（不含头像资源）
   });
   function restoreDirtyFlags(current, previous) {
     if (!current || typeof current !== 'object') return;

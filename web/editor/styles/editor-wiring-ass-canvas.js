@@ -511,6 +511,7 @@
     // 快照顺序与 payload 一致；播放预览只传当前活跃字幕，同轨可以有多句。
     // 检查指定字幕时用 role + cueId 定位，不假定主/副/叠加轨固定下标。
     const records = [];
+    global.MaweMultiplayerAvatarCanvas?.draw(ctx, payload?.avatars, 'below'); // [multiplayer] 文字后的头像
     tracks.forEach((track) => {
       if (track?.visible === false) {
         records.push({ skipped: true, opacity: 0 });
@@ -518,6 +519,7 @@
       }
       records.push(drawTrack(track, width, height));
     });
+    global.MaweMultiplayerAvatarCanvas?.draw(ctx, payload?.avatars, 'above'); // [multiplayer] 文字前的头像
     lastRender = { playResX: width, playResY: height, tracks: records };
   }
 

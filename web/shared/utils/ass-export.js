@@ -196,16 +196,16 @@ export function createUtilsModule(dependencies) {
       : DEFAULT_SPEAKER_LABEL_SEPARATOR;
     const events = [];
     const stackItems = [];
-    const addStackItem = (role, segment, index, context, start, end, style, size, styleName, speakerName, fade, originalText, eventName = null) => {
+    const addStackItem = (role, segment, index, context, start, end, style, size, styleName, speakerName, fade, originalText, multiplayerCue = null) => {
       const colorName = effectiveColorName(segment, context);
       // [multiplayer] 分组字幕的说话人前缀跟随分组文字色，不取五色调色板。
-      const speakerColor = eventName === null && (colorStyle === 'text' || colorStyle === 'speaker')
+      const speakerColor = !multiplayerCue && (colorStyle === 'text' || colorStyle === 'speaker')
         ? colorStyles.find(entry => entry.name === colorName)?.value || style.primaryColor : style.primaryColor;
       const runs = assInlineStyleRuns(fade.text, emphasisSyntax, inlineOptions);
       if (speakerName) runs.unshift({ text: `${speakerName}${speakerLabelSeparator}`, speakerColor });
       stackItems.push({ role, segment, index, start: start * 10, end: end * 10,
         style, fontSize: size, styleName, speakerName, runs, fad: fade.fad, originalText,
-        ...(eventName !== null ? { eventName } : {}) });
+        ...(multiplayerCue ? { eventName: multiplayerCue.speaker, multiplayerGroup: multiplayerCue.group.index } : {}) });
     };
     // 颜色样式只有在 ASS 能表达为整句样式（text / stroke）时才生成
     // 调色板样式；speaker 只给说话人前缀加局部颜色，none 回落 Default。
@@ -261,7 +261,7 @@ export function createUtilsModule(dependencies) {
       const animationTags = assMode
         ? assAnimationOverrideTags(profile, { fad: sentenceFade?.fad || null }) : '';
       if (assMode) addStackItem('main', segment, sourceIndex, source, startCentiseconds, endCentiseconds, styleForEvent, eventFontSize,
-        mpCue ? mpCue.styleName : styleName, speakerName, sentenceFade, eventText, mpCue ? mpCue.speaker : null);
+        mpCue ? mpCue.styleName : styleName, speakerName, sentenceFade, eventText, mpCue);
       const decoratedText = animationTags ? `{${animationTags}}${eventText}` : eventText;
       events.push(
         `Dialogue: 0,${formatAssTime(startCentiseconds * 10)},${formatAssTime(endCentiseconds * 10)},${styleName},${normalizeAssEventField(speakerName)},0,0,0,,${decoratedText}`,
@@ -315,7 +315,7 @@ export function createUtilsModule(dependencies) {
         addStackItem('extension', segment, index, extensionSource, startCentiseconds, endCentiseconds,
           mpExtension ? mpExtension.style : extensionStyle, mpExtension ? mpExtension.fontSize : extensionScaledFontSize,
           mpExtension ? mpExtension.styleName : 'Extension', extensionSpeakerName, extensionFade, undefined,
-          mpExtension ? mpExtension.speaker : null);
+          mpExtension);
         const extensionText = extensionAnimationTags
           ? `{${extensionAnimationTags}}${extensionContent}` : extensionContent;
         events.push(
@@ -395,7 +395,7 @@ export function createUtilsModule(dependencies) {
       if (assMode) addStackItem('overlay', segment, index, overlaySource, startCentiseconds, endCentiseconds,
         mpOverlay ? mpOverlay.style : overlayStyleFor(overlayColorName), mpOverlay ? mpOverlay.fontSize : fontSize,
         mpOverlay ? mpOverlay.styleName : overlayStyleNameFor(overlayColorName), overlaySpeakerName, overlayFade, undefined,
-        mpOverlay ? mpOverlay.speaker : null);
+        mpOverlay);
       const overlayText = overlayAnimationTags
         ? `{${overlayAnimationTags}}${overlayContent}` : overlayContent;
       events.push(
