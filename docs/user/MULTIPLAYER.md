@@ -4,6 +4,15 @@
 
 > 第 1–5 阶段均已完成：模式开关、12 个样式分组、分组快捷键、ASS 分组样式导出，三条字幕轨同时显示与轨间移动，按槽位排版与单块偏移，分组头像的即时预览、实际画面预览与烧录。
 
+## Windows 本地快速启动
+
+从源码运行时，双击仓库根目录的 `MAW-Multiplayer.bat`，按菜单选择：打开编辑器（空白或恢复上次工程）、打开 Launcher（转写、工具箱、烧录字幕）、更新依赖、运行多人模式测试、检查运行环境。也可以把 `.mosp` 工程直接拖到 bat 上用编辑器打开。
+
+- 第一次运行会自动创建 Python 虚拟环境（`uv sync`）并安装前端依赖（`pnpm install`）；需要已安装 Python 3.11+ 与 Node.js 22.13+。
+- 拉取新代码后选「更新依赖」。
+- 「检查运行环境」会列出 FFmpeg（含 libass）与 Pillow 是否可用；缺 FFmpeg 时可运行 `winget install Gyan.FFmpeg`。
+- 命令行用法：`MAW-Multiplayer.bat editor|resume|launcher|update|test|doctor`。
+
 ## 开启与关闭
 
 在「工程设置 → 字幕轨道」勾选「多人联机」。开关随工程保存，默认关闭。

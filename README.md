@@ -1,6 +1,6 @@
 # Moy's ASR Workflow（MAW）
 
-> **MAW Multiplayer（MAW 联机版）** ：本仓库是基于 [MAW](https://github.com/Moyf/moys-asr-workflow) 修改的非官方分支，沿用原项目的 AGPL-3.0 许可与版权声明。修改内容：新增给多人游戏实况视频做字幕的「多人联机模式」——12 个样式分组与快捷键、三条字幕轨同时显示、按槽位排版与单块偏移、分组头像（即时预览、实际画面与烧录），默认关闭，关闭时行为与上游一致。用法见 [多人联机模式](docs/user/MULTIPLAYER.md)。
+> **MAW Multiplayer（MAW 联机版）** ：本仓库是基于 [MAW](https://github.com/Moyf/moys-asr-workflow) 修改的非官方分支，沿用原项目的 AGPL-3.0 许可与版权声明。修改内容：新增给多人游戏实况视频做字幕的「多人联机模式」——12 个样式分组与快捷键、三条字幕轨同时显示、按槽位排版与单块偏移、分组头像（即时预览、实际画面与烧录），默认关闭，关闭时行为与上游一致。用法见 [多人联机模式](docs/user/MULTIPLAYER.md)；Windows 上从源码运行可双击根目录的 `MAW-Multiplayer.bat`。
 
 [![English README](https://img.shields.io/badge/README-English-2563eb?style=flat-square)](README-en.md)
 [![GitHub Release](https://img.shields.io/github/v/release/Moyf/moys-asr-workflow?display_name=tag&sort=semver)](https://github.com/Moyf/moys-asr-workflow/releases/latest)
