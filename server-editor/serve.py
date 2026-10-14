@@ -59,6 +59,7 @@ from maw.app_paths import default_server_settings_path, legacy_server_settings_p
 from maw.web_build import BundlePreflightError, ensure_bundle  # noqa: E402
 from maw.ass_styles import load_ass_style_library, save_ass_style_library  # noqa: E402
 from maw.ffmpeg import resolve_ffmpeg_tools  # noqa: E402
+from maw.multiplayer_avatars import AvatarPlanError, build_avatar_filter, parse_avatar_plan  # noqa: E402  # [multiplayer]
 from maw.media_jobs import (  # noqa: E402
     MEDIA_JOB_ADMISSION_TTL, MediaJob, MediaJobBusy, MediaJobCancelled, MediaJobManager, MediaJobUnavailable,
 )
@@ -703,6 +704,26 @@ def render_ass_frame_png(
             "-frames:v", "1",
             "-c:v", "png", "-pix_fmt", "rgb24", "-f", "image2pipe", "pipe:1",
         ]
+        # [multiplayer] ASS 携带头像节时，与烧录共用同一滤镜链：文字后头像 → 字幕 → 文字前头像。
+        avatar_plan = parse_avatar_plan(ass_text)
+        avatar_plan = avatar_plan.active_at(int(time_ms)) if avatar_plan else None
+        avatar_warning = ""
+        avatar_filter = None
+        if avatar_plan and avatar_plan.placements:
+            try:
+                avatar_filter = build_avatar_filter(
+                    avatar_plan, Path(tmp) / "avatars", "ass=filename='frame.ass'",
+                    base_input="0:V:0", time_offset_ms=int(time_ms), rgb_output=True)
+            except AvatarPlanError as error:
+                avatar_warning = f"{error} 实际画面暂不显示头像。"
+        if avatar_filter:
+            avatar_inputs, graph, output_label = avatar_filter
+            map_index = command.index("-map")
+            command[map_index:map_index + 2] = []
+            vf_index = command.index("-vf")
+            command[vf_index:vf_index + 2] = ["-filter_complex", graph, "-map", output_label]
+            input_index = command.index("-i") + 2
+            command[input_index:input_index] = avatar_inputs
         try:
             result = subprocess.run(  # noqa: S603 - 固定参数的单帧渲染
                 command, cwd=tmp, capture_output=True, timeout=ASS_FRAME_RENDER_TIMEOUT_SEC,
@@ -719,7 +740,7 @@ def render_ass_frame_png(
                 "未能渲染当前帧：媒体可能没有视频画面（纯音频工程），或时间已超出媒体时长。"
                 f"（{detail[-300:]}）"
             )
-        warnings = []
+        warnings = [avatar_warning] if avatar_warning else []
         for glyph, family in libass_missing_glyphs(stderr):
             character = ""
             if glyph:

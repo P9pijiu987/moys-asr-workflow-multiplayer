@@ -149,6 +149,30 @@ export function createUtilsModule(dependencies) {
     return { slices, diagnostics, width, height, avatars };
   }
 
+  // 头像烧录落点：把同一字幕、同一位置的连续分片合并成一段，并按 \fad 计算淡入淡出
+  // （只有落点起于字幕开始才淡入、止于字幕结束才淡出；与 Canvas 预览的透明度规则一致）。
+  function mergeMultiplayerAvatarPlacements(avatars, profile) {
+    const result = [];
+    const profileFad = profile?.animations?.fade?.enabled ? null
+      : profile?.animations?.fad?.enabled ? profile.animations.fad : null;
+    const sameSpot = (left, right) => left.assetId === right.assetId && left.cueStart === right.cueStart
+      && left.x === right.x && left.y === right.y && left.size === right.size && left.layer === right.layer;
+    for (const avatar of Array.isArray(avatars) ? avatars : []) {
+      const previous = result[result.length - 1];
+      if (previous && previous.end === avatar.start && sameSpot(previous, avatar)) {
+        previous.end = avatar.end;
+        continue;
+      }
+      result.push({ ...avatar });
+    }
+    return result.map(({ cueStart, cueEnd, fad, ...placement }) => {
+      const fade = fad || profileFad;
+      return { ...placement,
+        fadeIn: fade && placement.start === cueStart ? Math.max(0, Math.round(fade.inMs || 0)) : 0,
+        fadeOut: fade && placement.end === cueEnd ? Math.max(0, Math.round(fade.outMs || 0)) : 0 };
+    });
+  }
+
   // 预览命中测试：返回当前帧中包含 PlayRes 坐标点的最上层字幕项（后绘制者优先）。
   function multiplayerHitTest(frameItems, x, y) {
     const list = Array.isArray(frameItems) ? frameItems : [];
@@ -162,5 +186,5 @@ export function createUtilsModule(dependencies) {
     return null;
   }
 
-  return Object.freeze({ createMultiplayerLayoutPlan, multiplayerHitTest });
+  return Object.freeze({ createMultiplayerLayoutPlan, mergeMultiplayerAvatarPlacements, multiplayerHitTest });
 }

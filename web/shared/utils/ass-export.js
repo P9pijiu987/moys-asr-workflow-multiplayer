@@ -403,6 +403,7 @@ export function createUtilsModule(dependencies) {
       );
     });
 
+    let multiplayerAvatarLines = []; // [multiplayer]
     if (assMode) {
       // [multiplayer] 多人模式改用槽位排版；产出同构计划，事件生成与预览路径不变。
       const plan = multiplayer
@@ -411,6 +412,11 @@ export function createUtilsModule(dependencies) {
         : dependencies.assCreateStackPlan({ items: stackItems, profile,
           width: resolution.width, height: resolution.height, measure: options.measureAssRun });
       if (typeof options.onAssPlan === 'function') options.onAssPlan({ ...plan, profile });
+      // [multiplayer] 头像落点随 ASS 一起交给实际画面预览与烧录。
+      if (multiplayer && plan.avatars?.length) {
+        multiplayerAvatarLines = dependencies.multiplayerAvatarSections(
+          dependencies.mergeMultiplayerAvatarPlacements(plan.avatars, profile), options.multiplayer.assets);
+      }
       if (options.allowAssPlanDiagnostics) return '';
       if (!options.allowAssPlanDiagnostics && plan.diagnostics.length) throw new Error(plan.diagnostics[0].message);
       events.length = 0;
@@ -560,6 +566,7 @@ export function createUtilsModule(dependencies) {
       `Format: ${ASS_EVENT_FORMAT}`,
       ...events,
       '',
+      ...multiplayerAvatarLines,
     ].join('\n');
   }
 

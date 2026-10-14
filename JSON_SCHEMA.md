@@ -642,6 +642,9 @@
 - 分组解析顺序：`cues` 中的显式分组 → `speaker_map` → `color_map` → 第 1 组。`cues` 以稳定段 ID 为键；拆分出的新段继承原段条目，合并结果继承最早一段，换轨随段迁移，失效键在下次编辑后清理。
 - ASS 导出（ASS 方案模式）为每个分组写一行 `Style: MP01`…`MP12`，事件的 `Name` 字段写分组说话人，位置写为 `\an2\pos(x, y)`：`x = 画面宽 × (0.5 + offset.x)`、`y = 画面高 × (slot.y + offset.y)`（再钳制到画面内、同槽让位）。非 ASS 方案的旧外观导出不受影响。
 - 头像与文字作为整体框在槽位上居中：头像在左时文字为 `\an1`、左缘紧贴「头像右缘 + 间距」；头像在右时文字为 `\an3`、右缘紧贴「头像左缘 − 间距」；头像在上时文字为 `\an2`，头像底边在文字顶边之上一个间距。头像与文字块垂直居中对齐（左 / 右）。
+- ASS 导出在开启头像时于文末追加两个自定义节，供实际画面预览与烧录使用（libass 忽略未知节）：
+  - `[MAW Multiplayer Avatars]`，`Format: Start, End, Asset, X, Y, Size, Opacity, Shape, Radius, Layer, FadeIn, FadeOut, Shadow`；`Start` / `End` 为整数毫秒，`X` / `Y` 为头像左上角 PlayRes 坐标，`Size` 为边长像素，`FadeIn` / `FadeOut` 为毫秒，`Shadow` 为 `-` 或 `#RRGGBB:不透明度:模糊:X:Y`（像素已按 PlayResY 换算）；同一字幕同一位置的连续排版分片合并为一行。
+  - `[MAW Multiplayer Assets]`，`Format: Asset, Mime, Data`，`Data` 为 base64。
 - 未知子字段原样保留；数值越界时钳制，非法分组 / 槽位引用与不合法的头像资源被忽略，多人数据永远不会阻止工程加载或保存。
 
 ---

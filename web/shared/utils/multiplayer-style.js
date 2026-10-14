@@ -55,5 +55,43 @@ export function createUtilsModule(dependencies) {
     });
   }
 
-  return Object.freeze({ createMultiplayerAssContext, multiplayerStyleName });
+  const MULTIPLAYER_AVATAR_SECTION = '[MAW Multiplayer Avatars]';
+
+  const MULTIPLAYER_ASSET_SECTION = '[MAW Multiplayer Assets]';
+
+  function formatNumber(value) {
+    return String(Number(Number(value).toFixed(2)));
+  }
+
+  // 把头像落点与所需图片写进 ASS 的两个自定义节。libass 与常见播放器忽略不认识的节；
+  // 实际画面预览与烧录读取同一份文本，用 Pillow + ffmpeg overlay 叠加头像。
+  function multiplayerAvatarSections(placements, assets) {
+    const list = Array.isArray(placements) ? placements : [];
+    if (!list.length) return [];
+    const used = [...new Set(list.map((placement) => placement.assetId))].filter((id) => assets?.[id]?.data);
+    if (!used.length) return [];
+    const usedSet = new Set(used);
+    const shadow = (value) => (value
+      ? [value.color, value.opacity, value.blur, value.x, value.y].map((part) => (typeof part === 'number' ? formatNumber(part) : part)).join(':')
+      : '-');
+    return [
+      MULTIPLAYER_AVATAR_SECTION,
+      '; MAW Multiplayer: avatar overlays for burn-in and actual-frame preview; other players ignore this section.',
+      'Format: Start, End, Asset, X, Y, Size, Opacity, Shape, Radius, Layer, FadeIn, FadeOut, Shadow',
+      ...list.filter((placement) => usedSet.has(placement.assetId)).map((placement) => `Avatar: ${[
+        Math.round(placement.start), Math.round(placement.end), placement.assetId,
+        formatNumber(placement.x), formatNumber(placement.y), formatNumber(placement.size),
+        Math.round(placement.opacity), placement.shape, formatNumber(placement.radius), placement.layer,
+        placement.fadeIn || 0, placement.fadeOut || 0, shadow(placement.shadow),
+      ].join(',')}`),
+      '',
+      MULTIPLAYER_ASSET_SECTION,
+      'Format: Asset, Mime, Data',
+      ...used.map((id) => `Asset: ${id},${assets[id].mime},${assets[id].data}`),
+      '',
+    ];
+  }
+
+  return Object.freeze({ MULTIPLAYER_ASSET_SECTION, MULTIPLAYER_AVATAR_SECTION, createMultiplayerAssContext,
+    multiplayerAvatarSections, multiplayerStyleName });
 }

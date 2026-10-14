@@ -8,6 +8,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from typing import Callable, Final, Mapping
 from maw.gui_platform import creationflags, release_process_tree, startupinfo, terminate_process_tree
 from maw.output_naming import media_suffix
 from maw.ass_styles import DEFAULT_SRT_STYLE, ass_style_force_style, ass_style_line, find_ass_style, load_ass_style_library
+from maw.multiplayer_avatars import AvatarPlanError, build_avatar_filter, parse_avatar_plan  # [multiplayer]
 
 
 ALLOWED_DIRECTIVES: Final = frozenset({"ffconcat", "file", "inpoint", "outpoint", "duration"})
@@ -448,6 +450,7 @@ def run_burn_subtitles(
     green_input = _green_screen_input(subtitle) if green_screen else []
     prepared_subtitle = subtitle
     converted_subtitle: Path | None = None
+    avatar_dir: Path | None = None  # [multiplayer]
     last_error: MediaToolError | None = None
     try:
         if subtitle.suffix.lower() == ".srt":
@@ -461,6 +464,18 @@ def run_burn_subtitles(
             )
             prepared_subtitle = converted_subtitle
         input_command = ["-i", str(media)] if media is not None else green_input
+        # [multiplayer] ASS 携带头像节时改用 filter_complex：文字后头像 → 字幕 → 文字前头像。
+        video_filter = ["-vf", _subtitle_filter(prepared_subtitle), "-map", "0:v:0"]
+        avatar_plan = _avatar_plan_for(prepared_subtitle)
+        if avatar_plan is not None:
+            avatar_dir = Path(tempfile.mkdtemp(prefix="maw-avatars-"))
+            try:
+                avatar_inputs, graph, output_label = build_avatar_filter(
+                    avatar_plan, avatar_dir, _subtitle_filter(prepared_subtitle), base_input="0:v:0")
+            except AvatarPlanError as error:
+                raise MediaToolError(str(error)) from error
+            input_command = [*input_command, *avatar_inputs]
+            video_filter = ["-filter_complex", graph, "-map", output_label]
         common_command = [
             str(ffmpeg_path),
             "-y",
@@ -471,10 +486,7 @@ def run_burn_subtitles(
             "-progress",
             "pipe:1",
             *input_command,
-            "-vf",
-            _subtitle_filter(prepared_subtitle),
-            "-map",
-            "0:v:0",
+            *video_filter,
             *([] if green_screen else ["-map", "0:a?", "-map_metadata", "0"]),
         ]
         for encoder in attempts:
@@ -523,6 +535,8 @@ def run_burn_subtitles(
     finally:
         if converted_subtitle is not None:
             converted_subtitle.unlink(missing_ok=True)
+        if avatar_dir is not None:  # [multiplayer] 预处理的头像 PNG 只在本次烧录中使用
+            shutil.rmtree(avatar_dir, ignore_errors=True)
 
 
 def run_extract_audio(
@@ -750,6 +764,17 @@ def _burn_encoding_settings(request: BurnSubtitleRequest) -> tuple[int, str, str
     if audio_bitrate not in AUDIO_BITRATES:
         raise MediaToolError(f"unsupported audio bitrate: {audio_bitrate}")
     return crf, preset, audio_bitrate
+
+
+def _avatar_plan_for(subtitle: Path):
+    """[multiplayer] 读取 ASS 中的头像节；SRT 或没有头像时返回 None。"""
+    if subtitle.suffix.lower() not in {".ass", ".ssa"}:
+        return None
+    try:
+        text = subtitle.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return None
+    return parse_avatar_plan(text)
 
 
 def _subtitle_filter(
