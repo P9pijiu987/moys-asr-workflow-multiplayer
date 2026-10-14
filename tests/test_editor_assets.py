@@ -74,6 +74,7 @@ class EditorAssetContractTests(CompactContainerAssertions, unittest.TestCase):
                 # [multiplayer]
                 "shared/utils/multiplayer-data.js",
                 "shared/utils/multiplayer-style.js",
+                "shared/utils/multiplayer-layout.js",
                 "shared/utils/ass-export.js",
                 "shared/utils/export-plan.js",
                 "shared/utils/fcp7.js",
@@ -227,6 +228,7 @@ class EditorAssetContractTests(CompactContainerAssertions, unittest.TestCase):
                 # [multiplayer]
                 "editor/multiplayer/mp-state.js",
                 "editor/multiplayer/mp-tracks.js",
+                "editor/multiplayer/mp-placement.js",
                 "editor/multiplayer/mp-shortcuts.js",
                 "editor/multiplayer/mp-groups-panel.js",
                 "editor/boot/editor-startup.js",

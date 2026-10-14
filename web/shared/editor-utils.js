@@ -36,6 +36,7 @@
     ...window.MAWE.resolve('utils-multiplayer-data', helpers),
   };
   Object.assign(multiplayerHelpers, window.MAWE.resolve('utils-multiplayer-style', { ...helpers, ...multiplayerHelpers }));
+  Object.assign(multiplayerHelpers, window.MAWE.resolve('utils-multiplayer-layout', { ...helpers, ...multiplayerHelpers }));
   Object.assign(helpers, multiplayerHelpers);
   Object.assign(helpers, window.MAWE.resolve('utils-ass-export', helpers));
   Object.assign(helpers, window.MAWE.resolve('utils-export-plan', helpers));

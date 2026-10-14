@@ -221,6 +221,49 @@ export function createUtilsModule(dependencies) {
     return data?.groups?.[resolveMultiplayerGroupIndex(data, track, segment, trackSegments)] || null;
   }
 
+  // 槽位：cue 表覆盖 → 轨道默认槽位 → 第一个槽位。
+  function resolveMultiplayerSlot(data, track, segment) {
+    const slots = Array.isArray(data?.slots) && data.slots.length ? data.slots : MULTIPLAYER_DEFAULT_SLOTS;
+    const cue = data?.cues?.[multiplayerCueKey(track, segment?.id)];
+    const wanted = cue?.slot || data?.tracks?.[track]?.slot;
+    return slots.find((slot) => slot.id === wanted) || slots[0];
+  }
+
+  function resolveMultiplayerOffset(data, track, segment) {
+    const offset = data?.cues?.[multiplayerCueKey(track, segment?.id)]?.offset;
+    const x = Number(offset?.x);
+    const y = Number(offset?.y);
+    return { x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0 };
+  }
+
+  // 按画面位置从下到上排序的槽位 id（y 越大越靠下）。
+  function multiplayerSlotOrder(data) {
+    const slots = Array.isArray(data?.slots) && data.slots.length ? data.slots : MULTIPLAYER_DEFAULT_SLOTS;
+    return [...slots].sort((left, right) => right.y - left.y).map((slot) => slot.id);
+  }
+
+  // 写入或清除单条字幕的槽位覆盖 / 偏移；与轨道默认槽位相同、偏移为 0 时删除对应字段。
+  /** @param {{ slot?: string, offset?: { x?: number, y?: number } }} [placement] */
+  function setMultiplayerCuePlacement(data, track, segmentId, placement = {}) {
+    const { slot, offset } = placement;
+    const key = multiplayerCueKey(track, segmentId);
+    const cues = { ...(isPlainObject(data?.cues) ? data.cues : {}) };
+    if (!key) return cues;
+    const entry = { ...(cues[key] || {}) };
+    if (slot !== undefined) {
+      if (!slot || slot === data?.tracks?.[track]?.slot) delete entry.slot;
+      else entry.slot = slot;
+    }
+    if (offset !== undefined) {
+      const normalized = normalizeMultiplayerOffset(offset);
+      if (normalized) entry.offset = normalized;
+      else delete entry.offset;
+    }
+    if (Object.keys(entry).length) cues[key] = entry;
+    else delete cues[key];
+    return cues;
+  }
+
   // 给一组字幕写入显式分组；返回新的 cues 对象，不修改输入。
   function assignMultiplayerGroup(cues, targets, groupId) {
     const next = { ...(isPlainObject(cues) ? cues : {}) };
@@ -453,6 +496,10 @@ export function createUtilsModule(dependencies) {
     reconcileMultiplayerCues,
     resolveMultiplayerGroup,
     resolveMultiplayerGroupIndex,
+    resolveMultiplayerOffset,
+    resolveMultiplayerSlot,
+    setMultiplayerCuePlacement,
+    multiplayerSlotOrder,
     trackSegmentsFromProject,
   });
 }

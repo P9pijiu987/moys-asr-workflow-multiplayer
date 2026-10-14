@@ -41,6 +41,7 @@ shared/utils/ass-canvas-layout.js
 # [multiplayer] 多人联机模式纯工具（须在 ass-export 之前解析）
 shared/utils/multiplayer-data.js
 shared/utils/multiplayer-style.js
+shared/utils/multiplayer-layout.js
 shared/utils/ass-export.js
 shared/utils/export-plan.js
 shared/utils/fcp7.js
@@ -194,6 +195,7 @@ editor/io/editor-wiring-file-drop.js
 # [multiplayer] 多人联机模式编辑器接线（依赖全部上游接线，须在 startup 之前）
 editor/multiplayer/mp-state.js
 editor/multiplayer/mp-tracks.js
+editor/multiplayer/mp-placement.js
 editor/multiplayer/mp-shortcuts.js
 editor/multiplayer/mp-groups-panel.js
 editor/boot/editor-startup.js

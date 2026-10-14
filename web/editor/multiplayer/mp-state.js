@@ -269,6 +269,13 @@
     setRawData({ ...current, cues });
   }
 
+  // 直接写入 cue 表（不新建命令）：供拖动等已在外部 begin/commit 的连续操作使用。
+  function writeCues(cues) {
+    const current = rawData();
+    if (!current) return;
+    setRawData({ ...current, cues });
+  }
+
   // 撤销快照：字段缺失时为 null，恢复时同样删除字段。
   function historySnapshot() {
     return clone(rawData());
@@ -372,6 +379,7 @@
     loadGroupStyleFromLibrary,
     afterSegmentsCommand,
     moveCueEntries,
+    writeCues,
     historySnapshot,
     restoreSnapshot,
     exportContext,

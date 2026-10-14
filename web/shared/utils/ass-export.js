@@ -404,8 +404,12 @@ export function createUtilsModule(dependencies) {
     });
 
     if (assMode) {
-      const plan = dependencies.assCreateStackPlan({ items: stackItems, profile,
-        width: resolution.width, height: resolution.height, measure: options.measureAssRun });
+      // [multiplayer] 多人模式改用槽位排版；产出同构计划，事件生成与预览路径不变。
+      const plan = multiplayer
+        ? dependencies.createMultiplayerLayoutPlan({ items: stackItems, data: options.multiplayer, profile,
+          width: resolution.width, height: resolution.height, measure: options.measureAssRun })
+        : dependencies.assCreateStackPlan({ items: stackItems, profile,
+          width: resolution.width, height: resolution.height, measure: options.measureAssRun });
       if (typeof options.onAssPlan === 'function') options.onAssPlan({ ...plan, profile });
       if (options.allowAssPlanDiagnostics) return '';
       if (!options.allowAssPlanDiagnostics && plan.diagnostics.length) throw new Error(plan.diagnostics[0].message);

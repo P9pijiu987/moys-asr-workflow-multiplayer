@@ -632,12 +632,12 @@
 | `color_map` | object | 字幕颜色名 → 分组 id，默认黄 / 绿 / 红 / 紫 / 蓝 → 第 1–5 组 |
 | `speaker_map` | object | ASR 返回的 opaque `speaker` → 分组 id |
 | `tracks` | object | 三条多人轨借用现有数组：`main` = 顶层 `segments`，`overlay` = `overlay_track`，`extension` = `multi_subtitle.tracks[0]`；`slot` 指向 `slots[*].id` |
-| `slots` | array | 1–5 个槽位，`y` 为文字块底边占画面高度的比例（第 3 阶段排版使用） |
+| `slots` | array | 1–5 个槽位，`y` 为文字块底边占画面高度的比例；字幕块以 `\an2` 底边居中锚定在槽位上，同一时刻同槽的多块按开始顺序向上让位 |
 | `cues` | object | 键为 `"<轨>/<段 id>"`，值可含 `group`（分组 id）、`slot`（槽位覆盖）、`offset`（`{x, y}`，画面比例，范围 −1–1） |
 | `track_flags_before` | object | 开启多人模式前 `multi_subtitle.enabled` 与 `overlay_track.enabled` 的值（`multi_subtitle_enabled`、`overlay_enabled`）；开启时两条轨被打开、双语绑定被清空，关闭时按此恢复并删除该字段 |
 
 - 分组解析顺序：`cues` 中的显式分组 → `speaker_map` → `color_map` → 第 1 组。`cues` 以稳定段 ID 为键；拆分出的新段继承原段条目，合并结果继承最早一段，换轨随段迁移，失效键在下次编辑后清理。
-- ASS 导出（ASS 方案模式）为每个分组写一行 `Style: MP01`…`MP12`，事件的 `Name` 字段写分组说话人。非 ASS 方案的旧外观导出不受影响。
+- ASS 导出（ASS 方案模式）为每个分组写一行 `Style: MP01`…`MP12`，事件的 `Name` 字段写分组说话人，位置写为 `\an2\pos(x, y)`：`x = 画面宽 × (0.5 + offset.x)`、`y = 画面高 × (slot.y + offset.y)`（再钳制到画面内、同槽让位）。非 ASS 方案的旧外观导出不受影响。
 - 未知子字段原样保留；数值越界时钳制，非法分组 / 槽位引用被忽略，多人数据永远不会阻止工程加载或保存。
 
 ---

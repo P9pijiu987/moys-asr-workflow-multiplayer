@@ -41,6 +41,20 @@
     multiplayer.assignGroupToSelection(groupIndex);
   }, true);
 
+  // Alt+↑ / Alt+↓：切换选中字幕的画面槽位（↑ / ↓ 本身被上游用于切换主副轨焦点）。
+  document.addEventListener('keydown', (event) => {
+    const multiplayer = global.MaweMultiplayer;
+    if (!multiplayer?.isEnabled() || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    if (MaweInlineEdit.editingState || MaweInlineEdit.extensionEditingState) return;
+    if (isBlockedTarget() || modalOpen() || !hasSelection()) return;
+    // CSS 预览框获得焦点时 Alt+方向键归上游用于缩放预览框。
+    if (document.activeElement === MaweDom.overlayEl) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    global.MaweMultiplayerPlacement?.shiftSlotForSelection(event.key === 'ArrowUp' ? 1 : -1);
+  }, true);
+
   // Alt+1/2/3：把选中字幕移动到轨 1 / 轨 2 / 轨 3（主轨 / 叠加轨 / 副轨）。
   // 用 event.code 判断数字键，避免 macOS 上 Option+数字产生特殊字符。
   document.addEventListener('keydown', (event) => {

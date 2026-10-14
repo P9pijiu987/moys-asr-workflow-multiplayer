@@ -82,11 +82,18 @@ test('cues use their group style on all three borrowed tracks, with the group sp
   assert.ok(!dialogues(ass).some((line) => /,(Extension|Overlay[^,]*),/.test(line.split(',').slice(3, 4).join(','))));
 });
 
-test('phase 1 keeps role positions: extension stays at its own style anchor', () => {
-  const upstream = h.buildAssPayload(main, optionSets.assTracks);
-  const grouped = h.buildAssPayload(main, { ...optionSets.assTracks, multiplayer: fullData });
-  const pos = (ass, text) => dialogues(ass).find((line) => line.endsWith(text))?.match(/\\pos\(([^)]+)\)/)?.[1];
-  assert.equal(pos(grouped, 'Extension'), pos(upstream, 'Extension'));
+test('slot layout positions each track at its slot and every event carries an explicit \\pos', () => {
+  const ass = h.buildAssPayload(main, { ...optionSets.assTracks, multiplayer: fullData });
+  const positions = (text) => dialogues(ass).filter((line) => line.endsWith(text)).map((line) => {
+    const match = /\\an(\d)\\q2\\pos\(([^,]+),([^)]+)\)/u.exec(line);
+    return match ? { an: Number(match[1]), x: Number(match[2]), y: Number(match[3]) } : null;
+  });
+  // 2160p：轨 1 → bottom 0.92、轨 2 → middle 0.82、轨 3 → top 0.72，均为底边居中锚点。
+  for (const [text, y] of [['左边有人', 0.92 * 2160], ['叠加', 0.82 * 2160], ['Extension', 0.72 * 2160]]) {
+    const found = positions(text);
+    assert.ok(found.length, text);
+    for (const position of found) assert.deepEqual(position, { an: 2, x: 1920, y: Number(y.toFixed(4)) }, text);
+  }
 });
 
 test('speaker labels use the group speaker and the group text colour', () => {

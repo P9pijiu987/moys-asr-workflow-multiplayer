@@ -155,7 +155,7 @@
     }
     if (!helpEntry) return;
     helpEntry.innerHTML = enabled
-      ? '<kbd>1~9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> 分配第 1–12 个多人分组'
+      ? '<kbd>1~9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> 分配第 1–12 个多人分组 <kbd>Alt+1~3</kbd> 移到轨 1–3 <kbd>Alt+↑/↓</kbd> 切换槽位'
       : helpOriginal;
   }
 

@@ -152,6 +152,11 @@
       "exportName": "createUtilsModule"
     },
     {
+      "file": "shared/utils/multiplayer-layout.js",
+      "name": "utils-multiplayer-layout",
+      "exportName": "createUtilsModule"
+    },
+    {
       "file": "shared/utils/ass-export.js",
       "name": "utils-ass-export",
       "exportName": "createUtilsModule"
