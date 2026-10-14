@@ -155,6 +155,11 @@
 
 [打开正文](plans/MAWE%20%E6%8E%A5%E7%BA%BF%E6%8B%86%E5%88%86%E4%B8%8E%E7%9B%AE%E5%BD%95%E5%88%86%E5%B1%82%E8%AE%A1%E5%88%92.md)
 
+<a name="plan-multiplayer"></a>
+### 多人联机模式实施计划
+
+[打开方案](plans/%E5%A4%9A%E4%BA%BA%E8%81%94%E6%9C%BA%E6%A8%A1%E5%BC%8F%E5%AE%9E%E6%96%BD%E8%AE%A1%E5%88%92.md)
+
 <a name="engineering-project-format"></a>
 ### 工程文件格式
 
