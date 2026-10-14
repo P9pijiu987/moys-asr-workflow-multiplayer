@@ -220,8 +220,10 @@ class PackagingContractTests(CompactContainerAssertions, unittest.TestCase):
         self.assertIn("MAW-lite", faq)
         self.assertIn("下载带内置 FFmpeg 的完整版 MAW 包", faq)
         self.assertIn("FAQ-常见问题.txt", spec)
-        for excluded_module in ("funasr", "qwen_asr", "onnxruntime", "PIL", "rapidocr", "torch", "torchaudio", "readline"):
+        for excluded_module in ("funasr", "qwen_asr", "onnxruntime", "rapidocr", "torch", "torchaudio", "readline"):
             self.assertIn(f'"{excluded_module}"', spec)
+        # [multiplayer] Pillow 用于多人头像烧录，随主程序打包，不再列入排除表。
+        self.assertNotIn('    "PIL",\n', spec)
         self.assertIn('"maw.waveform"', spec)
         self.assertNotIn('"waveform",', spec)
         self.assertNotIn('"*.mp4"', spec)
@@ -342,7 +344,8 @@ class PackagingContractTests(CompactContainerAssertions, unittest.TestCase):
         dependencies = set(project["project"]["dependencies"])
         ocr_dependencies = set(project["dependency-groups"]["ocr"])
         self.assertNotIn("onnxruntime>=1.18", dependencies)
-        self.assertNotIn("pillow>=10.0.0", dependencies)
+        # [multiplayer] Pillow 改为主依赖（头像烧录），其余 OCR 依赖仍不得进入主包。
+        self.assertIn("pillow>=10.0.0", dependencies)
         self.assertNotIn("rapidocr>=3.9.0", dependencies)
         self.assertNotIn("numpy>=2.2,<2.5", dependencies)
         self.assertEqual(

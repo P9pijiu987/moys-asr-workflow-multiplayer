@@ -196,6 +196,8 @@ opencc_hiddenimports = collect_submodules("opencc")
 
 # OCR dependencies and model files stay outside the frozen bundle. The bundled
 # worker only bootstraps the optional runtime when the user installs it.
+# [multiplayer] Pillow is bundled again for multiplayer avatar burn-in; it is
+# no longer an OCR-only dependency.
 
 excluded_local_modules = [
     "accelerate",
@@ -205,7 +207,6 @@ excluded_local_modules = [
     "modelscope",
     "qwen_asr",
     "onnxruntime",
-    "PIL",
     "rapidocr",
     "torch",
     "torchaudio",

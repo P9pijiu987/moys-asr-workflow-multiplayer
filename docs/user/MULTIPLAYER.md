@@ -100,4 +100,4 @@ SRT 等其他格式不受多人模式影响。
 
 - 导出的 ASS 末尾带两个自定义节：`[MAW Multiplayer Avatars]`（每个头像的显示时间、位置、大小与样式）和 `[MAW Multiplayer Assets]`（头像图片）。libass 和常见播放器会忽略这两节，所以在其他软件里打开只显示文字。
 - 「实际画面预览」（localhost 编辑器）和 Launcher 工具箱的「烧录字幕」读取同一份 ASS，用 Pillow 把头像处理成带透明度、阴影和裁切的图片，再用 FFmpeg 叠加：文字后的头像 → 字幕 → 文字前的头像。头像随字幕淡入淡出（跟随输出方案或单句的 `\fad`）。
-- 需要带 libass 的 FFmpeg（与原有 ASS 烧录相同）和 Pillow。从源码运行时用 `uv sync --group build` 安装 Pillow；当前发布包不含 Pillow，缺少时实际画面预览只显示文字并给出提示，烧录会报错而不是生成没有头像的视频。
+- 需要带 libass 的 FFmpeg（与原有 ASS 烧录相同）和 Pillow。Pillow 是主程序依赖，`uv sync` 与发布包都会包含；万一环境缺少 Pillow，实际画面预览只显示文字并给出提示，烧录会报错而不是生成没有头像的视频。

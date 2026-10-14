@@ -17,7 +17,10 @@ dependencies = [
     # 唯一生成路径，无 Python 参考实现回退。内核只在生成时按调用点导入，缺失时打日志
     # 跳过缓存生成，不在导入期阻断转写入口（缓存可由装了内核的环境重建）。
     # >=2026.0.0：头部 mtime/size 指纹按官方规格取 stat() 低 32 位（大文件支持）。
-    "quapeaks>=2026.0.0"
+    "quapeaks>=2026.0.0",
+    # [multiplayer] 多人联机模式的头像烧录 / 实际画面预览用 Pillow 预处理头像；
+    # 其余 OCR 依赖（RapidOCR、ONNX Runtime、numpy、模型）仍只在独立 OCR 运行时中。
+    "pillow>=10.0.0",
 ]
 
 # maw：MOSS runtime 依赖（Transformers 5.x）与 local dependency group 的 qwen-asr
