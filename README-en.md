@@ -1,5 +1,7 @@
 # Moy's ASR Workflow (MAW)
 
+> **MAW Multiplayer** : this repository is an unofficial fork modified from [MAW](https://github.com/Moyf/moys-asr-workflow), keeping the original AGPL-3.0 license and copyright notices. Changes: an opt-in "multiplayer mode" for subtitling multiplayer gameplay videos — 12 style groups, group shortcuts and per-group ASS style export (three simultaneous tracks, slot layout and avatars are planned). It is off by default and behaves exactly like upstream when off. See [Multiplayer mode](docs/user/MULTIPLAYER.md) (Chinese).
+
 [![中文 README](https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-2563eb?style=flat-square)](README.md)
 
 [![GitHub Release](https://img.shields.io/github/v/release/Moyf/moys-asr-workflow?display_name=tag&sort=semver)](https://github.com/Moyf/moys-asr-workflow/releases/latest)

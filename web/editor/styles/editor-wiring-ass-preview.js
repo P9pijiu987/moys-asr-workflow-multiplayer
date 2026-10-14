@@ -257,7 +257,8 @@ function applyAssSubtitlePreview({ tMs, overlaySegments }) {
   const key = JSON.stringify([revision, ASS_STYLE_LIBRARY, MaweSettings.EDITOR_SETTINGS,
     MaweAppearance.getSubtitleAppearance(), metrics.resolution, MaweColors.COLOR_PALETTE,
     MaweSpeakerLabels.getSpeakerLabelSettings(), MaweDom.overlayToggle.checked,
-    MaweDom.extensionOverlayToggle?.checked, assStackFontRevision]);
+    MaweDom.extensionOverlayToggle?.checked, assStackFontRevision,
+    window.MaweMultiplayer?.revision() ?? null]); // [multiplayer] 分组数据变化需重建排布计划
   if (key !== cachedAssStackKey || !cachedAssStackPlan) {
     MaweExportSrt.buildAss({ preview: true, allowAssPlanDiagnostics: true,
       onAssPlan: plan => { cachedAssStackPlan = plan; } });

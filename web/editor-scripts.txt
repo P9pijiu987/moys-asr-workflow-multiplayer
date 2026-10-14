@@ -38,6 +38,9 @@ shared/utils/lrc.js
 shared/utils/ass-style.js
 shared/utils/ass-animation.js
 shared/utils/ass-canvas-layout.js
+# [multiplayer] 多人联机模式纯工具（须在 ass-export 之前解析）
+shared/utils/multiplayer-data.js
+shared/utils/multiplayer-style.js
 shared/utils/ass-export.js
 shared/utils/export-plan.js
 shared/utils/fcp7.js
@@ -188,5 +191,9 @@ editor/ui/editor-wiring-context-menus.js
 editor/media/editor-wiring-waveform-hints.js
 editor/io/editor-wiring-server-events.js
 editor/io/editor-wiring-file-drop.js
+# [multiplayer] 多人联机模式编辑器接线（依赖全部上游接线，须在 startup 之前）
+editor/multiplayer/mp-state.js
+editor/multiplayer/mp-shortcuts.js
+editor/multiplayer/mp-groups-panel.js
 editor/boot/editor-startup.js
 editor/boot/editor-onboarding.js

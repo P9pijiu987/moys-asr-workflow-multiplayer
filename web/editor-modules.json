@@ -142,6 +142,16 @@
       "exportName": "createUtilsModule"
     },
     {
+      "file": "shared/utils/multiplayer-data.js",
+      "name": "utils-multiplayer-data",
+      "exportName": "createUtilsModule"
+    },
+    {
+      "file": "shared/utils/multiplayer-style.js",
+      "name": "utils-multiplayer-style",
+      "exportName": "createUtilsModule"
+    },
+    {
       "file": "shared/utils/ass-export.js",
       "name": "utils-ass-export",
       "exportName": "createUtilsModule"

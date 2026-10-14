@@ -27,11 +27,14 @@
   function snapshotSegments() {
   // _dirty 也保留，恢复后能再次导出"工程文件"时正确标记；多字幕数据与主轨
   // 必须处于同一条记录中，绑定/成对删除/联动拆分才能原子撤销。
-  return EDITOR_SETTINGS_UTILS.buildSegmentsHistorySnapshot(
+  const snapshot = EDITOR_SETTINGS_UTILS.buildSegmentsHistorySnapshot(
     MaweBoot.DATA.segments,
     MaweMultiSubtitleCore.getMultiSubtitleState(),
     getOverlayTrack(),
   );
+  // [multiplayer] 多人数据与字幕同一条记录，分组/偏移随拆分合并原子撤销。
+  snapshot.multiplayer = window.MaweMultiplayer?.historySnapshot() ?? null;
+  return snapshot;
 }
 
 
@@ -277,6 +280,7 @@
     schema: 'moy.asr.multi_subtitle.v1', enabled: false, display_mode: 'both', tracks: [], bindings: [],
   };
   MaweBoot.DATA.overlay_track = MULTI_SUBTITLE_UTILS.normalizeOverlayTrack(snapshot.overlay_track);
+  if (Object.hasOwn(snapshot, 'multiplayer')) window.MaweMultiplayer?.restoreSnapshot(snapshot.multiplayer); // [multiplayer]
   if (record.projectChanges) Object.assign(MaweState.changes, record.projectChanges);
   MaweMultiSubtitleCore.normalizeMultiSubtitleState();
   MaweState.reconcileSegmentsDirty();

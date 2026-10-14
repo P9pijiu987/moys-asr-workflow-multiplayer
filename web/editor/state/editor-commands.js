@@ -50,6 +50,7 @@ window.MAWE.register('editor-commands', function createEditorCommands(dependenci
     segments: MaweState.project.segments,
     multi_subtitle: MaweState.project.multi_subtitle,
     overlay_track: MaweState.project.overlay_track,
+    multiplayer: window.MaweMultiplayer?.rawData() ?? null, // [multiplayer] 与历史快照同序同键
   });
   function restoreDirtyFlags(current, previous) {
     if (!current || typeof current !== 'object') return;
@@ -67,6 +68,7 @@ window.MAWE.register('editor-commands', function createEditorCommands(dependenci
     },
     hasChanges: snapshot => fingerprint(projectSegments()) !== snapshot.fingerprint,
     publish(snapshot) {
+      window.MaweMultiplayer?.afterSegmentsCommand(snapshot.record.segs); // [multiplayer] 拆分/合并后迁移分组条目
       MaweHistory.commitRecord(snapshot.record);
       MaweState.changes.projectImportDirty = true;
     },

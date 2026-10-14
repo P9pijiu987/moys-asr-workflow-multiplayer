@@ -168,6 +168,9 @@ interface Window {
   };
   ASR_EDITOR_PALETTE?: Array<{ name: string; value: string }>;
   showSaveFilePicker?: any;
+  // [multiplayer] 多人联机模式门面（web/editor/multiplayer/）。
+  MaweMultiplayer?: any;
+  AsrMultiplayerUtils?: any;
 }
 
 // Replaceable browser/desktop capabilities used by editor I/O.

@@ -132,6 +132,7 @@ datas = [
     (str(ROOT / "maw" / "media_export_audio.py"), "local-runtime/maw"),
     (str(ROOT / "maw" / "project.py"), "local-runtime/maw"),
     (str(ROOT / "maw" / "language.py"), "local-runtime/maw"),
+    (str(ROOT / "maw" / "multiplayer_project.py"), "local-runtime/maw"),  # [multiplayer]
     (str(ROOT / "maw" / "project_preview.py"), "local-runtime/maw"),
     (str(ROOT / "maw" / "qwen_audio.py"), "local-runtime/maw"),
     (str(ROOT / "maw" / "colors.py"), "local-runtime/maw"),
@@ -156,6 +157,7 @@ datas = [
     (str(ROOT / "maw" / "text_conversion.py"), "ocr-runtime/maw"),
     (str(ROOT / "maw" / "project.py"), "ocr-runtime/maw"),
     (str(ROOT / "maw" / "language.py"), "ocr-runtime/maw"),
+    (str(ROOT / "maw" / "multiplayer_project.py"), "ocr-runtime/maw"),  # [multiplayer]
     (str(ROOT / "maw" / "project_preview.py"), "ocr-runtime/maw"),
     (str(ROOT / "maw" / "output_naming.py"), "ocr-runtime/maw"),
     (str(ROOT / "maw" / "gui_config.py"), "ocr-runtime/maw"),

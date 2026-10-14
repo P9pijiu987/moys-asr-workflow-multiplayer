@@ -49,6 +49,11 @@
 
 [打开正文](user/MULTI_SUBTITLE.md)
 
+<a name="user-multiplayer"></a>
+### 多人联机模式
+
+[打开正文](user/MULTIPLAYER.md)
+
 <a name="user-ocr"></a>
 ### OCR 字幕去重
 

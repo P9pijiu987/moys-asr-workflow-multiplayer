@@ -71,6 +71,9 @@ class EditorAssetContractTests(CompactContainerAssertions, unittest.TestCase):
                 "shared/utils/ass-style.js",
                 "shared/utils/ass-animation.js",
                 "shared/utils/ass-canvas-layout.js",
+                # [multiplayer]
+                "shared/utils/multiplayer-data.js",
+                "shared/utils/multiplayer-style.js",
                 "shared/utils/ass-export.js",
                 "shared/utils/export-plan.js",
                 "shared/utils/fcp7.js",
@@ -221,6 +224,10 @@ class EditorAssetContractTests(CompactContainerAssertions, unittest.TestCase):
                 "editor/media/editor-wiring-waveform-hints.js",
                 "editor/io/editor-wiring-server-events.js",
                 "editor/io/editor-wiring-file-drop.js",
+                # [multiplayer]
+                "editor/multiplayer/mp-state.js",
+                "editor/multiplayer/mp-shortcuts.js",
+                "editor/multiplayer/mp-groups-panel.js",
                 "editor/boot/editor-startup.js",
                 "editor/boot/editor-onboarding.js",
         ),

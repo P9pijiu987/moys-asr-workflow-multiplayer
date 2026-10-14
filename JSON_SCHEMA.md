@@ -73,6 +73,7 @@
 | `workspace` | `object` | 否 | 编辑器工作区：四个功能区的窗口布局与显示状态；不影响字幕和波形缓存。服务器版也可使用独立的本机命名工作区库跨工程复用 |
 | `preview` | `object` | 否 | 预览呈现设置。含 `preview.subtitle`（主字幕预览框与样式）、可选的 `preview.extension_subtitle`（副字幕样式）和 `preview.sticker`（表情包预览层）。不影响字幕时间与文本 |
 | `overlay_track` | `object` | 否 | 独立的叠加字幕轨。它的段可以与主轨重叠，但轨内保持时间顺序；用于保存导入 SRT 时出现的双层字幕 |
+| `multiplayer` | `object` | 否 | MAW Multiplayer 扩展：多人联机模式的分组、轨道槽位与逐条分组指定（见 1.8）；上游版本原样保留 |
 
 `media_metadata.video_fps` 是生成工程时从源视频读取的媒体 FPS，仅作为编辑器切入帧模式时的默认值；它不替代编辑器自己的 `timebase.fps`，用户仍可在项目设置中修改。旧工程没有 `media_metadata` 时继续使用编辑器原有默认值。`video_fps_ratio` 用于保留 `30000/1001` 这类非整数帧率的原始比例。
 
@@ -597,6 +598,47 @@
 - AI 整理的新注释优先写覆盖源字幕的区段（合法 `end > start`），`note` 统一为 `[AI] 操作：原因`。自动删除使用「删除」且不带 `review`；替代版本存疑使用「替代项」，其他待复核使用「复核」，并带 `pending`。这是已有字段的使用约定，不增加 schema 字段；注释与字幕禁用、`gap_remove` 决定独立，删除注释不撤销剪辑。
 - 读写双方都应容忍未知字段与非法项：规范化丢弃无法解析的项，不抛错。
 
+### 1.8 multiplayer 多人联机模式（MAW Multiplayer 扩展，可选）
+
+`multiplayer` 是本分支（MAW Multiplayer）新增的可选字段，用于多人游戏实况字幕。上游 MAW 不认识该字段时会按「保留不认识的顶层字段」原样透传，打开、编辑与保存都不会报错；字段缺失时模式视为关闭，编辑器也不会主动写出它。完整用法见 [多人联机模式](docs/user/MULTIPLAYER.md)。
+
+```json
+{
+  "multiplayer": {
+    "schema": "maw.multiplayer.v1",
+    "enabled": true,
+    "groups": [
+      { "id": "g01", "name": "阿明", "speaker": "阿明", "avatar": null,
+        "style": { "fontName": "Microsoft YaHei", "fontSize": 72, "primaryColor": "#ffd34d", "outline": 5 } }
+    ],
+    "color_map": { "yellow": "g01", "green": "g02", "red": "g03", "purple": "g04", "blue": "g05" },
+    "speaker_map": { "1": "g01", "2": "g02" },
+    "tracks": {
+      "main": { "label": "轨 1", "slot": "bottom" },
+      "overlay": { "label": "轨 2", "slot": "middle" },
+      "extension": { "label": "轨 3", "slot": "top" }
+    },
+    "slots": [{ "id": "bottom", "y": 0.92 }, { "id": "middle", "y": 0.82 }, { "id": "top", "y": 0.72 }],
+    "cues": { "main/main-012": { "group": "g07" } }
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `schema` | string | 固定为 `maw.multiplayer.v1`；无法识别的版本只读保留，不启用模式 |
+| `enabled` | bool | 工程级开关，缺失为 `false`；关闭时导出、快捷键与上游一致，数据保留 |
+| `groups` | array | 恒为 12 项，`id` 为 `g01`–`g12`；`name`、`speaker` 最长 64 字符；`style` 与 ASS 样式库条目同形（字号按 1080p 参考存储，导出按 `PlayResY` 换算）；`avatar` 预留给头像资源 |
+| `color_map` | object | 字幕颜色名 → 分组 id，默认黄 / 绿 / 红 / 紫 / 蓝 → 第 1–5 组 |
+| `speaker_map` | object | ASR 返回的 opaque `speaker` → 分组 id |
+| `tracks` | object | 三条多人轨借用现有数组：`main` = 顶层 `segments`，`overlay` = `overlay_track`，`extension` = `multi_subtitle.tracks[0]`；`slot` 指向 `slots[*].id` |
+| `slots` | array | 1–5 个槽位，`y` 为文字块底边占画面高度的比例（第 3 阶段排版使用） |
+| `cues` | object | 键为 `"<轨>/<段 id>"`，值可含 `group`（分组 id）、`slot`（槽位覆盖）、`offset`（`{x, y}`，画面比例，范围 −1–1） |
+
+- 分组解析顺序：`cues` 中的显式分组 → `speaker_map` → `color_map` → 第 1 组。`cues` 以稳定段 ID 为键；拆分出的新段继承原段条目，合并结果继承最早一段，换轨随段迁移，失效键在下次编辑后清理。
+- ASS 导出（ASS 方案模式）为每个分组写一行 `Style: MP01`…`MP12`，事件的 `Name` 字段写分组说话人。非 ASS 方案的旧外观导出不受影响。
+- 未知子字段原样保留；数值越界时钳制，非法分组 / 槽位引用被忽略，多人数据永远不会阻止工程加载或保存。
+
 ---
 
 ## 二、segment 对象
@@ -905,6 +947,7 @@ uv run python edit.py your_generated.mosp
 | `markers` | object | ❌ | 可选的 `moy.asr.markers.v1` 标记与区段；AI 复核项带 `review` 字段 |
 | `overlay_track` | object | ❌ | 独立叠加字幕轨 `{enabled, segments}` |
 | `multi_subtitle` | object | ❌ | 可选的 `moy.asr.multi_subtitle.v1` 主轨/扩展轨与绑定 |
+| `multiplayer` | object | ❌ | MAW Multiplayer 扩展 `maw.multiplayer.v1`：分组、槽位与逐条分组指定 |
 | `preview` | object | ❌ | 预览呈现设置容器 |
 | `preview.ass_mode` | boolean | ❌ | 当前工程的 ASS 字幕模式；缺失时关闭 |
 | `preview.subtitle.x` | number | ❌ | 归一化 `[0,1]`，`x + width <= 1` |

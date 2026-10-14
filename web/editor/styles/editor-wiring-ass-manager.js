@@ -50,6 +50,11 @@ function assStyleManagerId(prefix, items) {
 }
 
 function selectedAssStyle() {
+  // [multiplayer] 多人分组的样式存放在工程里，表单复用同一套字段。
+  if (assStyleManagerSelection.kind === 'mpgroup') {
+    const groupStyle = window.MaweMultiplayer?.groupStyle(assStyleManagerSelection.id);
+    if (groupStyle) return groupStyle;
+  }
   const id = assStyleManagerSelection.kind === 'style' ? assStyleManagerSelection.id : '';
   return window.AsrEditorUtils.assStyleForId(ASS_STYLE_LIBRARY, id || 'ass');
 }
@@ -60,6 +65,12 @@ function selectedAssProfile() {
 }
 
 function assStyleManagerSetSelection(kind, id) {
+  if (kind === 'mpgroup') { // [multiplayer]
+    if (!window.MaweMultiplayer?.group(id)) return;
+    assStyleManagerSelection = { kind, id };
+    syncAssStyleManager({ force: true });
+    return;
+  }
   const collection = kind === 'profile' ? ASS_STYLE_LIBRARY.assProfiles : ASS_STYLE_LIBRARY.styles;
   const item = (Array.isArray(collection) ? collection : []).find((candidate) => candidate?.id === id);
   if (!item) return;
@@ -161,6 +172,10 @@ function setNestedAssProfileValue(profile, path, value) {
 }
 
 function updateAssStyleField(field, value) {
+  if (assStyleManagerSelection.kind === 'mpgroup') { // [multiplayer] 写入工程分组，不改本机样式库
+    window.MaweMultiplayer?.updateGroupStyleField(assStyleManagerSelection.id, field, value);
+    return;
+  }
   const styleId = assStyleManagerSelection.kind === 'style' ? assStyleManagerSelection.id : '';
   if (!styleId) return;
   updateAssStyleManagerLibrary((library) => {
@@ -256,7 +271,10 @@ function syncAssStyleManager({ force = false } = {}) {
   ASS_STYLE_LIBRARY = window.AsrEditorUtils.normalizeAssStyleLibrary(ASS_STYLE_LIBRARY);
   const styles = ASS_STYLE_LIBRARY.styles || [];
   const profiles = ASS_STYLE_LIBRARY.assProfiles || [];
-  const selectedCollection = assStyleManagerSelection.kind === 'profile' ? profiles : styles;
+  // [multiplayer] 多人分组只在模式开启时可选；关闭后回落到样式列表。
+  const mpGroups = window.MaweMultiplayer?.isEnabled() ? window.MaweMultiplayer.data().groups : [];
+  const selectedCollection = assStyleManagerSelection.kind === 'profile' ? profiles
+    : assStyleManagerSelection.kind === 'mpgroup' ? mpGroups : styles;
   if (!selectedCollection.some((item) => item.id === assStyleManagerSelection.id)) {
     assStyleManagerSelection = assStyleManagerSelection.kind === 'profile'
       ? { kind: 'profile', id: profiles[0]?.id || 'ass' }
@@ -293,7 +311,7 @@ function syncAssStyleManager({ force = false } = {}) {
     styles.forEach((style) => appendAssStyleOption(assProfileStyleSelect, style.id, style.name));
     assProfileStyleSelect.value = selectedProfile.styleId;
   }
-  const isStyle = assStyleManagerSelection.kind === 'style';
+  const isStyle = assStyleManagerSelection.kind === 'style' || assStyleManagerSelection.kind === 'mpgroup'; // [multiplayer]
   if (assStyleEditorEmpty) assStyleEditorEmpty.hidden = selectedCollection.length > 0;
   if (assStyleForm) assStyleForm.hidden = !isStyle;
   if (assProfileForm) assProfileForm.hidden = isStyle;
@@ -303,12 +321,14 @@ function syncAssStyleManager({ force = false } = {}) {
   }
   if (assStyleDeleteButton) {
     const selected = selectedCollection.find((item) => item.id === assStyleManagerSelection.id);
-    assStyleDeleteButton.disabled = !selected || selected.builtin === true;
+    assStyleDeleteButton.disabled = !selected || selected.builtin === true
+      || assStyleManagerSelection.kind === 'mpgroup'; // [multiplayer] 分组固定 12 个，不能删除
     assStyleDeleteButton.title = selected?.builtin ? '内置条目不能删除' : '删除当前条目';
   }
   if (isStyle) syncAssStyleForm(selectedAssStyle());
   else syncAssProfileForm(selectedAssProfile());
   updateAssStyleLibraryStatus();
+  window.MaweMultiplayerGroupsPanel?.syncStyleWindow(assStyleManagerSelection); // [multiplayer]
   // 样式库变化后，设置页「字幕样式」里的 ASS 样式选择器同步刷新。
   syncSubtitleStyleAssControls();
   if (force) assStyleWindow.querySelector('.ass-style-editor')?.scrollTo({ top: 0 });

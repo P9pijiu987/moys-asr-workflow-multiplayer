@@ -57,6 +57,7 @@
     colorBar.title = `↑ 属于第 ${headIndex + 1} 条的颜色（${seg.color_ref.name}）`;
     colorBar.style.cursor = 'pointer';
   }
+  window.MaweMultiplayer?.decorateCueElement(el, colorBar, seg); // [multiplayer] 分组色与徽标
 }
 
 

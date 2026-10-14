@@ -172,6 +172,10 @@ export function createUtilsModule(dependencies) {
     // 是两套语义；color_underline 只控制 CSS 预览，不参与 ASS 导出。
     const colorStyle = normalizeAssColorStyle(appearance.ass_color_style) || 'text';
     const assMode = Boolean(profile);
+    // [multiplayer] 多人模式（仅 ASS 方案模式）：每条字幕改用所属分组的样式与 MPxx 样式行。
+    const multiplayer = assMode && options.multiplayer
+      ? dependencies.createMultiplayerAssContext?.(options.multiplayer, { resolutionHeight: resolution.height }) || null
+      : null;
     const emphasisSyntax = options.assEmphasisSyntax === 'none' ? 'none' : 'both';
     const inlineOptions = options;
     const numericTimeOffset = Number(options.timeOffset);
@@ -192,14 +196,16 @@ export function createUtilsModule(dependencies) {
       : DEFAULT_SPEAKER_LABEL_SEPARATOR;
     const events = [];
     const stackItems = [];
-    const addStackItem = (role, segment, index, context, start, end, style, size, styleName, speakerName, fade, originalText) => {
+    const addStackItem = (role, segment, index, context, start, end, style, size, styleName, speakerName, fade, originalText, eventName = null) => {
       const colorName = effectiveColorName(segment, context);
-      const speakerColor = colorStyle === 'text' || colorStyle === 'speaker'
+      // [multiplayer] 分组字幕的说话人前缀跟随分组文字色，不取五色调色板。
+      const speakerColor = eventName === null && (colorStyle === 'text' || colorStyle === 'speaker')
         ? colorStyles.find(entry => entry.name === colorName)?.value || style.primaryColor : style.primaryColor;
       const runs = assInlineStyleRuns(fade.text, emphasisSyntax, inlineOptions);
       if (speakerName) runs.unshift({ text: `${speakerName}${speakerLabelSeparator}`, speakerColor });
       stackItems.push({ role, segment, index, start: start * 10, end: end * 10,
-        style, fontSize: size, styleName, speakerName, runs, fad: fade.fad, originalText });
+        style, fontSize: size, styleName, speakerName, runs, fad: fade.fad, originalText,
+        ...(eventName !== null ? { eventName } : {}) });
     };
     // 颜色样式只有在 ASS 能表达为整句样式（text / stroke）时才生成
     // 调色板样式；speaker 只给说话人前缀加局部颜色，none 回落 Default。
@@ -215,8 +221,10 @@ export function createUtilsModule(dependencies) {
       // an imported/edited cue is shorter than that precision.
       const startCentiseconds = Math.max(0, Math.round(start / 10));
       const endCentiseconds = Math.max(startCentiseconds + 1, Math.round(rawEnd / 10));
-      const speakerName = speakerLabels
-        ? speakerLabelForSegment(segment, source, speakerLabels) : '';
+      // [multiplayer] 分组样式；说话人名取分组设置。
+      const mpCue = multiplayer ? multiplayer.cueStyle('main', segment, source, baseStyle) : null;
+      const speakerName = mpCue ? (speakerLabels ? mpCue.speaker : '')
+        : speakerLabels ? speakerLabelForSegment(segment, source, speakerLabels) : '';
       // 单句 `>>`/`<<` 渐入渐出标记只在 ASS 模式解析：先剥离行首行尾标记，
       // 再用剩余文本走强调/颜色管线，并用该句自身的 fad 覆盖全局动画。
       const sentenceFade = assMode
@@ -231,18 +239,19 @@ export function createUtilsModule(dependencies) {
       const colorName = effectiveColorName(segment, source);
       const styleName = assColorGroupsSupported && ASS_COLOR_STYLE_NAMES.includes(colorName)
         ? colorName.toUpperCase() : 'Default';
-      const styleForEvent = assMode && styleName !== 'Default'
+      const styleForEvent = mpCue ? mpCue.style : assMode && styleName !== 'Default'
         ? assStyleVariant(baseStyle, colorStyles.find((item) => item.name === colorName)?.value || '#ffffff', colorStyle)
         : baseStyle;
+      const eventFontSize = mpCue ? mpCue.fontSize : fontSize; // [multiplayer]
       const eventText = assEventText({
         segment,
         text: speakerLabels ? segmentText : text,
         speakerName,
         speakerLabelSeparator,
-        colorName,
+        colorName: mpCue ? null : colorName,
         colorStyles,
         style: styleForEvent,
-        fontSize,
+        fontSize: eventFontSize,
         colorStyle,
         speakerLabels,
         assMode,
@@ -251,7 +260,8 @@ export function createUtilsModule(dependencies) {
       });
       const animationTags = assMode
         ? assAnimationOverrideTags(profile, { fad: sentenceFade?.fad || null }) : '';
-      if (assMode) addStackItem('main', segment, sourceIndex, source, startCentiseconds, endCentiseconds, styleForEvent, fontSize, styleName, speakerName, sentenceFade, eventText);
+      if (assMode) addStackItem('main', segment, sourceIndex, source, startCentiseconds, endCentiseconds, styleForEvent, eventFontSize,
+        mpCue ? mpCue.styleName : styleName, speakerName, sentenceFade, eventText, mpCue ? mpCue.speaker : null);
       const decoratedText = animationTags ? `{${animationTags}}${eventText}` : eventText;
       events.push(
         `Dialogue: 0,${formatAssTime(startCentiseconds * 10)},${formatAssTime(endCentiseconds * 10)},${styleName},${normalizeAssEventField(speakerName)},0,0,0,,${decoratedText}`,
@@ -283,24 +293,29 @@ export function createUtilsModule(dependencies) {
         const extensionAnimationTags = assAnimationOverrideTags(profile, { includeMove: false, fad: extensionFade.fad });
         // 说话人前缀与主字幕同规则：开启「字幕显示说话人前缀」时副字幕
         // 也按自身轨的颜色映射追加前缀（上下文用副字幕轨自身数组）。
-        const extensionSpeakerName = speakerLabels
-          ? speakerLabelForSegment(segment, extensionSource, speakerLabels) : '';
+        // [multiplayer] 副轨作为多人轨 3：外观取分组样式，位置仍取副字幕样式。
+        const mpExtension = multiplayer ? multiplayer.cueStyle('extension', segment, extensionSource, extensionStyle) : null;
+        const extensionSpeakerName = mpExtension ? (speakerLabels ? mpExtension.speaker : '')
+          : speakerLabels ? speakerLabelForSegment(segment, extensionSource, speakerLabels) : '';
         const extensionContent = assEventText({
           segment,
           text: extensionFade.text,
           speakerName: extensionSpeakerName,
           speakerLabelSeparator,
-          colorName: effectiveColorName(segment, extensionSource),
+          colorName: mpExtension ? null : effectiveColorName(segment, extensionSource),
           colorStyles,
-          style: extensionStyle,
-          fontSize: extensionScaledFontSize,
+          style: mpExtension ? mpExtension.style : extensionStyle,
+          fontSize: mpExtension ? mpExtension.fontSize : extensionScaledFontSize,
           colorStyle,
           speakerLabels,
           assMode,
           emphasisSyntax,
           inlineOptions,
         });
-        addStackItem('extension', segment, index, extensionSource, startCentiseconds, endCentiseconds, extensionStyle, extensionScaledFontSize, 'Extension', extensionSpeakerName, extensionFade);
+        addStackItem('extension', segment, index, extensionSource, startCentiseconds, endCentiseconds,
+          mpExtension ? mpExtension.style : extensionStyle, mpExtension ? mpExtension.fontSize : extensionScaledFontSize,
+          mpExtension ? mpExtension.styleName : 'Extension', extensionSpeakerName, extensionFade, undefined,
+          mpExtension ? mpExtension.speaker : null);
         const extensionText = extensionAnimationTags
           ? `{${extensionAnimationTags}}${extensionContent}` : extensionContent;
         events.push(
@@ -356,18 +371,20 @@ export function createUtilsModule(dependencies) {
       const overlayAnimationTags = assMode
         ? assAnimationOverrideTags(profile, { includeMove: false, fad: overlayFade.fad }) : '';
       // 叠加字幕同样跟随「字幕显示说话人前缀」：映射按叠加轨自身数组解析。
-      const overlaySpeakerName = speakerLabels
-        ? speakerLabelForSegment(segment, overlaySource, speakerLabels) : '';
+      // [multiplayer] 叠加轨作为多人轨 2：外观取分组样式，位置仍取叠加样式。
+      const mpOverlay = multiplayer ? multiplayer.cueStyle('overlay', segment, overlaySource, overlayStyleFor(null)) : null;
+      const overlaySpeakerName = mpOverlay ? (speakerLabels ? mpOverlay.speaker : '')
+        : speakerLabels ? speakerLabelForSegment(segment, overlaySource, speakerLabels) : '';
       const overlayContent = assMode
         ? assEventText({
           segment,
           text: overlayFade.text,
           speakerName: overlaySpeakerName,
           speakerLabelSeparator,
-          colorName: overlayColorName,
+          colorName: mpOverlay ? null : overlayColorName,
           colorStyles,
-          style: overlayStyleFor(overlayColorName),
-          fontSize,
+          style: mpOverlay ? mpOverlay.style : overlayStyleFor(overlayColorName),
+          fontSize: mpOverlay ? mpOverlay.fontSize : fontSize,
           colorStyle,
           speakerLabels,
           assMode,
@@ -375,7 +392,10 @@ export function createUtilsModule(dependencies) {
           inlineOptions,
         })
         : escapeAssText(segment.text);
-      if (assMode) addStackItem('overlay', segment, index, overlaySource, startCentiseconds, endCentiseconds, overlayStyleFor(overlayColorName), fontSize, overlayStyleNameFor(overlayColorName), overlaySpeakerName, overlayFade);
+      if (assMode) addStackItem('overlay', segment, index, overlaySource, startCentiseconds, endCentiseconds,
+        mpOverlay ? mpOverlay.style : overlayStyleFor(overlayColorName), mpOverlay ? mpOverlay.fontSize : fontSize,
+        mpOverlay ? mpOverlay.styleName : overlayStyleNameFor(overlayColorName), overlaySpeakerName, overlayFade, undefined,
+        mpOverlay ? mpOverlay.speaker : null);
       const overlayText = overlayAnimationTags
         ? `{${overlayAnimationTags}}${overlayContent}` : overlayContent;
       events.push(
@@ -444,7 +464,7 @@ export function createUtilsModule(dependencies) {
           const content = slice.legacy && !(item.sharedStackCue && (fontTransform || sharedDecorations)) ? item.originalText : assEmphasizedText('', scaledStyle, size, emphasisSyntax,
             { ...inlineOptions, preparedRuns: item.runs, fontTransform });
           const decorated = (position ? `{${position}}` : '') + (animation ? `{${animation}}` : '') + content;
-          events.push(`Dialogue: ${{ main: 0, extension: 1, overlay: 2 }[item.role]},${formatAssTime(piece.start)},${formatAssTime(piece.end)},${item.styleName},${normalizeAssEventField(item.speakerName)},0,0,0,,${decorated}`);
+          events.push(`Dialogue: ${{ main: 0, extension: 1, overlay: 2 }[item.role]},${formatAssTime(piece.start)},${formatAssTime(piece.end)},${item.styleName},${normalizeAssEventField(item.eventName ?? item.speakerName)},0,0,0,,${decorated}`);
         }
       }
     }
@@ -489,6 +509,8 @@ export function createUtilsModule(dependencies) {
                 : []),
             ]
             : []),
+          // [multiplayer] 每个分组一行独立 Style。
+          ...(multiplayer ? multiplayer.styleLines(baseStyle) : []),
         ]
         : [
           `Style: Default,${fontFamily},${fontSize},${assColorFromHex(appearance.color ?? options.color)},${assColorFromHex(appearance.color ?? options.color)},&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,80,1`,

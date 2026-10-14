@@ -31,6 +31,12 @@
   Object.assign(helpers, window.MAWE.resolve('utils-ass-style', helpers));
   Object.assign(helpers, window.MAWE.resolve('utils-ass-animation', helpers));
   Object.assign(helpers, window.MAWE.resolve('utils-ass-canvas-layout', helpers));
+  // [multiplayer] 多人联机模式纯工具：须在 ass-export 之前解析，导出挂在独立命名空间。
+  const multiplayerHelpers = {
+    ...window.MAWE.resolve('utils-multiplayer-data', helpers),
+  };
+  Object.assign(multiplayerHelpers, window.MAWE.resolve('utils-multiplayer-style', { ...helpers, ...multiplayerHelpers }));
+  Object.assign(helpers, multiplayerHelpers);
   Object.assign(helpers, window.MAWE.resolve('utils-ass-export', helpers));
   Object.assign(helpers, window.MAWE.resolve('utils-export-plan', helpers));
   Object.assign(helpers, window.MAWE.resolve('utils-fcp7', helpers));
@@ -615,6 +621,8 @@ window.AsrEditorUtils = {
     buildLottieAnimation,
     buildOgrafGraphic,
   };
+  // [multiplayer] 不扩大上游导出表，单独暴露多人联机工具。
+  window.AsrMultiplayerUtils = Object.freeze({ ...multiplayerHelpers });
   if (window.MAWE?.register) {
     window.MAWE.register('editor-utils', () => window.AsrEditorUtils);
   }

@@ -9,6 +9,7 @@ from typing import Final, TypeGuard, final
 
 from maw.project_preview import JsonDict, JsonValue, clamped_preview, validate_preview
 from maw.language import LANGUAGE_SOURCES, SPLIT_MODES, TIMESTAMP_GRANULARITIES
+from maw.multiplayer_project import normalize_multiplayer  # [multiplayer]
 
 # Python 3.11 has no typing.override; basedpyright's override marker is therefore
 # disabled for this compatibility module.
@@ -255,6 +256,7 @@ def _normalize_copy(project: JsonValue, errors: list[ProjectValidationError]) ->
     _validate_transcription_metadata(normalized, errors)
     _normalize_overlay_track(normalized, errors)
     _normalize_multi_subtitle(normalized, segments, errors)
+    normalize_multiplayer(normalized)  # [multiplayer] 宽松修正，永不产生校验错误
     errors.extend(ProjectValidationError(path, message) for path, message in validate_preview(normalized))
     return normalized
 

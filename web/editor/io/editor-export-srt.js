@@ -241,6 +241,7 @@
     assSmallTextEnabled: MaweSettings.EDITOR_SETTINGS.assSmallTextEnabled,
     assLargeTextEnabled: MaweSettings.EDITOR_SETTINGS.assLargeTextEnabled,
     assCommentEnabled: MaweSettings.EDITOR_SETTINGS.assCommentEnabled,
+    multiplayer: window.MaweMultiplayer?.exportContext() ?? null, // [multiplayer] 关闭时为 null，导出走上游路径
   };
 }
 
