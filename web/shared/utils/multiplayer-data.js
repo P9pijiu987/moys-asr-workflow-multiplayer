@@ -54,6 +54,19 @@ export function createUtilsModule(dependencies) {
     shadow: Object.freeze({ enabled: false, color: '#000000', opacity: 60, blur: 6, x: 0, y: 2 }),
   });
 
+  // 名字叠头像：在字幕里选中的几个字下方垫一层半透明头像（文字后图层）。
+  const MULTIPLAYER_DEFAULT_MARK_STYLE = Object.freeze({
+    size_em: 1.4,
+    opacity: 40,
+    shape: 'circle',
+    radius: 0.2,
+    offset_y_em: 0,
+  });
+
+  const MULTIPLAYER_MARK_TEXT_MAX_LENGTH = 32;
+
+  const MULTIPLAYER_MAX_MARKS_PER_CUE = 16;
+
   const MULTIPLAYER_AVATAR_POSITIONS = Object.freeze(['left', 'right', 'top']);
 
   const MULTIPLAYER_AVATAR_SHAPES = Object.freeze(['circle', 'rounded', 'square']);
@@ -174,12 +187,36 @@ export function createUtilsModule(dependencies) {
     return offset.x === 0 && offset.y === 0 ? null : offset;
   }
 
+  // 名字标记：{ text, occurrence, group }。text 是选中的原文片段，occurrence 是它在
+  // 字幕文字中第几次出现（从 0 起）；文字改动后对不上的标记在排版时被忽略。
+  function normalizeMultiplayerMarks(value) {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    const marks = [];
+    value.forEach((raw) => {
+      if (!isPlainObject(raw) || marks.length >= MULTIPLAYER_MAX_MARKS_PER_CUE) return;
+      const text = typeof raw.text === 'string' ? raw.text : '';
+      if (!text || text.length > MULTIPLAYER_MARK_TEXT_MAX_LENGTH || /[\u0000-\u001f\u007f]/u.test(text)) return;
+      const occurrence = Math.round(Number(raw.occurrence));
+      if (!Number.isFinite(occurrence) || occurrence < 0 || occurrence > 999) return;
+      if (multiplayerGroupIndex(raw.group) < 0) return;
+      const key = `${text}\u0000${occurrence}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      marks.push({ ...raw, text, occurrence, group: raw.group });
+    });
+    return marks;
+  }
+
   function normalizeMultiplayerCues(value, slotIds) {
     const source = isPlainObject(value) ? value : {};
     const result = {};
     Object.entries(source).forEach(([key, raw]) => {
       if (!parseMultiplayerCueKey(key) || !isPlainObject(raw)) return;
       const entry = { ...raw };
+      const marks = normalizeMultiplayerMarks(entry.marks);
+      if (marks.length) entry.marks = marks;
+      else delete entry.marks;
       if (multiplayerGroupIndex(entry.group) < 0) delete entry.group;
       if (entry.slot !== undefined && !slotIds.has(entry.slot)) delete entry.slot;
       const offset = normalizeMultiplayerOffset(entry.offset);
@@ -271,6 +308,7 @@ export function createUtilsModule(dependencies) {
       slots,
       cues: normalizeMultiplayerCues(source.cues, slotIds),
       avatar_defaults: normalizeMultiplayerAvatarStyle(source.avatar_defaults),
+      mark_defaults: normalizeMultiplayerMarkStyle(source.mark_defaults),
       assets: normalizeMultiplayerAssets(source.assets),
     };
   }
@@ -286,6 +324,62 @@ export function createUtilsModule(dependencies) {
     const style = normalizeMultiplayerAvatarStyle({ ...defaults, ...override,
       shadow: { ...defaults.shadow, ...(override.shadow || {}) } });
     return { assetId, asset, style };
+  }
+
+  function normalizeMultiplayerMarkStyle(value) {
+    const source = isPlainObject(value) ? value : {};
+    const base = MULTIPLAYER_DEFAULT_MARK_STYLE;
+    return {
+      ...source,
+      size_em: clampNumber(source.size_em, base.size_em, 0.3, 6),
+      opacity: Math.round(clampNumber(source.opacity, base.opacity, 0, 100)),
+      shape: MULTIPLAYER_AVATAR_SHAPES.includes(source.shape) ? source.shape : base.shape,
+      radius: clampNumber(source.radius, base.radius, 0, 0.5),
+      offset_y_em: clampNumber(source.offset_y_em, base.offset_y_em, -3, 3),
+    };
+  }
+
+  // 一条字幕上可用的名字标记（只保留所指分组设置了头像的）。
+  function resolveMultiplayerMarks(data, track, segment) {
+    const entry = data?.cues?.[multiplayerCueKey(track, segment?.id)];
+    const marks = normalizeMultiplayerMarks(entry?.marks);
+    if (!marks.length) return [];
+    const style = normalizeMultiplayerMarkStyle(data.mark_defaults);
+    return marks.map((mark) => {
+      const groupIndex = multiplayerGroupIndex(mark.group);
+      const assetId = stableId(data.groups?.[groupIndex]?.avatar);
+      return assetId && data.assets?.[assetId] ? { text: mark.text, occurrence: mark.occurrence, groupIndex, assetId, style } : null;
+    }).filter(Boolean);
+  }
+
+  // 替换一条字幕的名字标记；返回新的 cues 对象。
+  function setMultiplayerCueMarks(data, track, segmentId, marks) {
+    const key = multiplayerCueKey(track, segmentId);
+    const cues = { ...(isPlainObject(data?.cues) ? data.cues : {}) };
+    if (!key) return cues;
+    const entry = { ...(cues[key] || {}) };
+    const normalized = normalizeMultiplayerMarks(marks);
+    if (normalized.length) entry.marks = normalized;
+    else delete entry.marks;
+    if (Object.keys(entry).length) cues[key] = entry;
+    else delete cues[key];
+    return cues;
+  }
+
+  // 在原文中找出选区对应的标记：选中片段及它在之前出现过几次。
+  function multiplayerMarkFromSelection(text, start, end) {
+    const source = String(text ?? '');
+    const from = Math.max(0, Math.min(Number(start) || 0, Number(end) || 0));
+    const to = Math.min(source.length, Math.max(Number(start) || 0, Number(end) || 0));
+    const picked = source.slice(from, to);
+    const trimmedStart = from + (picked.length - picked.trimStart().length);
+    const selected = picked.trim();
+    if (!selected || selected.length > MULTIPLAYER_MARK_TEXT_MAX_LENGTH || /[\u0000-\u001f\u007f]/u.test(selected)) return null;
+    let occurrence = 0;
+    for (let index = source.indexOf(selected); index >= 0 && index < trimmedStart; index = source.indexOf(selected, index + 1)) {
+      occurrence += 1;
+    }
+    return { text: selected, occurrence };
   }
 
   // 未被任何分组引用的头像资源 id。
@@ -584,6 +678,7 @@ export function createUtilsModule(dependencies) {
     MULTIPLAYER_AVATAR_SHAPES,
     MULTIPLAYER_DEFAULT_AVATAR_STYLE,
     MULTIPLAYER_DEFAULT_COLOR_MAP,
+    MULTIPLAYER_DEFAULT_MARK_STYLE,
     MULTIPLAYER_DEFAULT_GROUP_COLORS,
     MULTIPLAYER_DEFAULT_SLOTS,
     MULTIPLAYER_DEFAULT_TRACKS,
@@ -603,6 +698,10 @@ export function createUtilsModule(dependencies) {
     moveMultiplayerSegments,
     normalizeMultiplayer,
     normalizeMultiplayerAvatarStyle,
+    normalizeMultiplayerMarkStyle,
+    multiplayerMarkFromSelection,
+    resolveMultiplayerMarks,
+    setMultiplayerCueMarks,
     resolveMultiplayerAvatar,
     unusedMultiplayerAssets,
     parseMultiplayerCueKey,

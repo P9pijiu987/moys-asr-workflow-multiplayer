@@ -163,3 +163,95 @@ test('the avatar is part of the hit box so dragging it moves the whole block', (
   const avatar = result.avatars[0];
   assert.equal(m.multiplayerHitTest(frame, avatar.x + 5, avatar.y + avatar.size / 2)?.segment.id, 'm');
 });
+
+const markData = (marks, extra = {}) => m.normalizeMultiplayer({
+  enabled: true,
+  groups: [{ name: 'A' }, { name: 'B', avatar: 'av2' }],
+  assets: { av2: { mime: 'image/png', width: 8, height: 8, data: 'iVBORw0KGgo=' } },
+  cues: { 'main/m': { marks } },
+  ...extra,
+});
+const fragmentsAt = (result, time) => h.assStackFrame(result, time).items.map((entry) => ({
+  text: entry.runs.map((run) => run.text).join(''), an: entry.alignment, x: entry.anchor.x, y: entry.anchor.y }));
+
+test('a name mark splits the line and centres a translucent avatar exactly under the name', () => {
+  // ABCDEFGH（8 × 50 = 400 宽）居中于 500：行左缘 300；名字 CD 位于 400–500，中心 450。
+  const data = markData([{ text: 'CD', occurrence: 0, group: 'g02' }]);
+  const result = planWith(data, [item('main', 'm', 0, 1000, 'ABCDEFGH')]);
+  assert.deepEqual(plain(fragmentsAt(result, 500)), [
+    { text: 'AB', an: 3, x: 400, y: 920 },
+    { text: 'CD', an: 2, x: 450, y: 920 },
+    { text: 'EFGH', an: 1, x: 500, y: 920 },
+  ]);
+  const [avatar] = result.avatars;
+  assert.equal(avatar.layer, 'below');
+  assert.equal(avatar.opacity, 40);
+  assert.equal(avatar.size, 70, 'default 1.4 × font size');
+  assert.equal(avatar.x + avatar.size / 2, 450, 'avatar shares the name centre');
+  assert.equal(avatar.y + avatar.size / 2, 920 - 25, 'vertically centred on the line');
+  // 命中框仍是整条字幕：点在别的片段上也能拖动整条。
+  assert.equal(m.multiplayerHitTest(h.assStackFrame(result, 500).items, 320, 900)?.segment.id, 'm');
+});
+
+test('marks pick the requested occurrence, handle several names, other lines and skip stale text', () => {
+  const data = markData([
+    { text: 'AB', occurrence: 1, group: 'g02' },
+    { text: 'XY', occurrence: 0, group: 'g02' },
+    { text: 'ZZ', occurrence: 0, group: 'g02' }, // 文字已不存在
+    { text: 'CD', occurrence: 0, group: 'g01' }, // 分组没有头像
+  ]);
+  const result = planWith(data, [item('main', 'm', 0, 1000, 'ABxAB\nXYQ')]);
+  const fragments = plain(fragmentsAt(result, 500));
+  // 第一行 ABxAB：第二个 AB 被标记；第二行 XYQ：XY 被标记，Q 跟在后面。
+  assert.deepEqual(fragments.map((entry) => [entry.text, entry.an]), [
+    ['ABx', 3], ['AB', 2], ['XY', 2], ['Q', 1],
+  ]);
+  assert.equal(fragments[1].y, fragments[0].y);
+  assert.equal(fragments[2].y, 920, 'last line sits on the slot');
+  assert.equal(fragments[0].y, 870, 'first line is one line height above');
+  assert.equal(result.avatars.length, 2);
+});
+
+test('the speaker prefix is not matched and stays on the first fragment', () => {
+  const data = markData([{ text: 'B', occurrence: 0, group: 'g02' }]);
+  const labelled = { ...item('main', 'm', 0, 1000, 'xByB'), runs: [{ text: 'B：', speakerColor: '#fff' }, { text: 'xByB' }] };
+  const fragments = plain(fragmentsAt(planWith(data, [labelled]), 500));
+  assert.deepEqual(fragments.map((entry) => [entry.text, entry.an]), [['B：x', 3], ['B', 2], ['yB', 1]]);
+});
+
+test('ASS export writes one positioned event per fragment and the mark avatar section', () => {
+  const data = markData([{ text: 'CD', occurrence: 0, group: 'g02' }]);
+  const ass = h.buildAssPayload([{ id: 'm', start: 0, end: 1000, text: 'ABCDEFGH' }], {
+    assProfile: profile, assStyle: h.ASS_DEFAULT_ASS_STYLE, multiplayer: data, playResX: 1920, playResY: 1080,
+  });
+  const events = ass.split('\n').filter((line) => line.startsWith('Dialogue:'));
+  assert.deepEqual(events.map((line) => /\\an(\d)/u.exec(line)[1] + line.slice(line.lastIndexOf('}') + 1)), ['3AB', '2CD', '1EFGH']);
+  assert.match(ass, /\[MAW Multiplayer Avatars\]\n.*\nFormat:.*\nAvatar: 0,1000,av2,[^\n]*,40,circle,0\.2,below,/u);
+});
+
+test('marks from a textarea selection record text and occurrence', () => {
+  assert.deepEqual(plain(m.multiplayerMarkFromSelection('阿明说阿明来了', 3, 5)), { text: '阿明', occurrence: 1 });
+  assert.deepEqual(plain(m.multiplayerMarkFromSelection('阿明说', 0, 2)), { text: '阿明', occurrence: 0 });
+  assert.deepEqual(plain(m.multiplayerMarkFromSelection(' 阿明 ', 0, 4)), { text: '阿明', occurrence: 0 });
+  assert.equal(m.multiplayerMarkFromSelection('abc', 1, 1), null);
+  const cues = m.setMultiplayerCueMarks(markData([]), 'main', 'm', [{ text: '阿明', occurrence: 0, group: 'g02' }, { text: '', group: 'g02' }]);
+  assert.deepEqual(plain(cues), { 'main/m': { marks: [{ text: '阿明', occurrence: 0, group: 'g02' }] } });
+  assert.deepEqual(plain(m.setMultiplayerCueMarks({ cues }, 'main', 'm', [])), {});
+});
+
+test('preview avatars on fragments match the plan avatars exactly (no duplicated cue avatar)', () => {
+  const data = m.normalizeMultiplayer({
+    enabled: true,
+    groups: [{ name: 'A', avatar: 'av1' }, { name: 'B', avatar: 'av2' }],
+    assets: { av1: { mime: 'image/png', width: 8, height: 8, data: 'iVBORw0KGgo=' }, av2: { mime: 'image/png', width: 8, height: 8, data: 'iVBORw0KGgo=' } },
+    cues: { 'main/m': { marks: [{ text: 'CD', occurrence: 0, group: 'g02' }] } },
+  });
+  const result = planWith(data, [{ ...item('main', 'm', 0, 1000, 'ABCDEFGH'), multiplayerGroup: 0 }]);
+  const frame = h.assStackFrame(result, 500).items;
+  const fromFrame = frame.flatMap((entry) => (entry.avatars || (entry.avatar ? [entry.avatar] : []))
+    .map((avatar) => ({ id: avatar.assetId, x: entry.anchor.x + avatar.x, y: entry.anchor.y + avatar.y, layer: avatar.layer })));
+  const fromPlan = result.avatars.map((avatar) => ({ id: avatar.assetId, x: avatar.x, y: avatar.y, layer: avatar.layer }));
+  const sort = (list) => plain(list).sort((a, b) => a.x - b.x);
+  assert.equal(fromFrame.length, 2);
+  assert.deepEqual(sort(fromFrame), sort(fromPlan));
+});

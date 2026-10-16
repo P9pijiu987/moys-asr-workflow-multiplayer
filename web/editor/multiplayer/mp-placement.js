@@ -100,7 +100,42 @@
       return element;
     };
     row.append(label('槽位', slot), label('X%', x), label('Y%', y), reset);
+    // 名字叠头像：在上方文本框里选中名字，再选一个设置了头像的分组。
+    const markRow = document.createElement('div');
+    markRow.className = 'mp-placement-row mp-mark-row';
+    markRow.id = 'mp-mark-row';
+    markRow.hidden = true;
+    const markGroup = document.createElement('select');
+    markGroup.id = 'mp-mark-group';
+    markGroup.title = '叠在名字下面的头像（只列出已设置头像的分组）';
+    const markAdd = document.createElement('button');
+    markAdd.type = 'button';
+    markAdd.id = 'mp-mark-add';
+    markAdd.textContent = '叠在选中文字下';
+    markAdd.title = '先在上方文本框中选中名字（一两个字），再点此按钮';
+    const markList = document.createElement('span');
+    markList.className = 'mp-mark-list';
+    markList.id = 'mp-mark-list';
+    markRow.append(label('名字叠头像', markGroup), markAdd, markList);
     anchor.after(row);
+    row.after(markRow);
+    // 按下按钮时文本框会失焦，先记下选区。
+    let pendingSelection = null;
+    markAdd.addEventListener('pointerdown', () => {
+      const textarea = document.getElementById('cue-panel-text');
+      pendingSelection = textarea ? { value: textarea.value, start: textarea.selectionStart, end: textarea.selectionEnd } : null;
+    });
+    markAdd.addEventListener('click', () => {
+      const textarea = document.getElementById('cue-panel-text');
+      const selection = pendingSelection
+        || (textarea ? { value: textarea.value, start: textarea.selectionStart, end: textarea.selectionEnd } : null);
+      pendingSelection = null;
+      addMarkFromSelection(selection, markGroup.value);
+    });
+    markList.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-mark-index]');
+      if (button) removeMark(Number(button.dataset.markIndex));
+    });
     const apply = (patch, label) => {
       const target = panelTarget();
       const mp = multiplayer();
@@ -121,7 +156,80 @@
       if (!target || !mp?.isEnabled()) return;
       apply({ slot: mp.data().tracks?.[target.track]?.slot, offset: { x: 0, y: 0 } }, '复位字幕位置');
     });
-    return { row, slot, x, y };
+    return { row, slot, x, y, markRow, markGroup, markAdd, markList };
+  }
+
+  function writeMarks(target, marks, label) {
+    const mp = multiplayer();
+    mp.mutate(label, (next) => {
+      next.cues = mp.utils.setMultiplayerCueMarks(next, target.track, target.id, marks);
+    }, { cueList: false });
+    panelKey = '';
+    syncPanel();
+  }
+
+  function currentMarks(target) {
+    const entry = multiplayer().data()?.cues?.[multiplayer().utils.multiplayerCueKey(target.track, target.id)];
+    return Array.isArray(entry?.marks) ? entry.marks : [];
+  }
+
+  function addMarkFromSelection(selection, groupId) {
+    const mp = multiplayer();
+    const target = panelTarget();
+    if (!mp?.isEnabled() || !target) return;
+    if (!groupId) {
+      MaweHint.flashHint('先在「头像…」里给分组设置头像', 'warning');
+      return;
+    }
+    // 文本框里可能有尚未提交的修改：先提交，再按提交后的文字定位。
+    MaweCuePanel.commitCuePanelEdit?.();
+    const segment = segmentFor(target);
+    if (!segment || !selection || selection.value !== segment.text) {
+      MaweHint.flashHint('请在字幕文本框中选中要叠头像的字后再试', 'warning');
+      return;
+    }
+    const mark = mp.utils.multiplayerMarkFromSelection(segment.text, selection.start, selection.end);
+    if (!mark) {
+      MaweHint.flashHint('请先在字幕文本框中选中名字（不含换行）', 'invalid');
+      return;
+    }
+    const marks = currentMarks(target).filter((item) => item.text !== mark.text || item.occurrence !== mark.occurrence);
+    marks.push({ ...mark, group: groupId });
+    writeMarks(target, marks, '名字叠头像');
+    MaweHint.flashHint(`已在「${mark.text}」下叠加头像`, 'success');
+  }
+
+  function removeMark(index) {
+    const target = panelTarget();
+    if (!target) return;
+    const marks = currentMarks(target).filter((_, position) => position !== index);
+    writeMarks(target, marks, '移除名字头像');
+  }
+
+  function syncMarks(target, data) {
+    const { markRow, markGroup, markAdd, markList } = panel;
+    markRow.hidden = !target;
+    if (!target) return;
+    const keys = multiplayer().utils.MULTIPLAYER_GROUP_KEYS;
+    const withAvatar = data.groups.map((group, index) => ({ group, index }))
+      .filter(({ group }) => group.avatar && data.assets?.[group.avatar]);
+    const previous = markGroup.value;
+    markGroup.replaceChildren(...(withAvatar.length
+      ? withAvatar.map(({ group, index }) => new Option(`${keys[index]} · ${group.name}${group.speaker ? `（${group.speaker}）` : ''}`, group.id))
+      : [new Option('（没有设置头像的分组）', '')]));
+    if ([...markGroup.options].some((option) => option.value === previous)) markGroup.value = previous;
+    markAdd.disabled = !withAvatar.length;
+    const marks = currentMarks(target);
+    markList.replaceChildren(...marks.map((mark, index) => {
+      const groupIndex = multiplayer().utils.multiplayerGroupIndex(mark.group);
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'mp-mark-chip';
+      chip.dataset.markIndex = String(index);
+      chip.textContent = `${mark.text}${mark.occurrence ? `（第 ${mark.occurrence + 1} 处）` : ''} · ${data.groups[groupIndex]?.name || mark.group} ×`;
+      chip.title = '点击移除这个名字头像';
+      return chip;
+    }));
   }
 
   function syncPanel() {
@@ -133,8 +241,12 @@
     if (key === panelKey) return;
     panelKey = key;
     panel.row.hidden = !target;
-    if (!target) return;
+    if (!target) {
+      panel.markRow.hidden = true;
+      return;
+    }
     const data = mp.data();
+    syncMarks(target, data);
     const order = mp.utils.multiplayerSlotOrder(data);
     const current = mp.utils.resolveMultiplayerSlot(data, target.track, target.segment).id;
     const defaultSlot = data.tracks?.[target.track]?.slot;
@@ -249,6 +361,8 @@
     .mp-placement-row select, .mp-placement-row input { min-height: 24px; font-size: 12px; color: var(--text-primary);
       background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); }
     .mp-placement-row input { width: 64px; }
+    .mp-mark-list { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+    .mp-placement-row .mp-mark-chip { color: var(--text-primary); background: var(--accent-tint, rgba(94, 167, 255, 0.15)); }
     .mp-placement-row button { min-height: 24px; padding: 2px 8px; font-size: 12px; cursor: pointer; color: var(--text-secondary);
       background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm, 4px); }
     .player-stage[data-mp-hover="true"] { cursor: move; }

@@ -633,7 +633,9 @@
 | `speaker_map` | object | ASR 返回的 opaque `speaker` → 分组 id |
 | `tracks` | object | 三条多人轨借用现有数组：`main` = 顶层 `segments`，`overlay` = `overlay_track`，`extension` = `multi_subtitle.tracks[0]`；`slot` 指向 `slots[*].id` |
 | `slots` | array | 1–5 个槽位，`y` 为文字块底边占画面高度的比例；字幕块以 `\an2` 底边居中锚定在槽位上，同一时刻同槽的多块按开始顺序向上让位 |
-| `cues` | object | 键为 `"<轨>/<段 id>"`，值可含 `group`（分组 id）、`slot`（槽位覆盖）、`offset`（`{x, y}`，画面比例，范围 −1–1） |
+| `cues` | object | 键为 `"<轨>/<段 id>"`，值可含 `group`（分组 id）、`slot`（槽位覆盖）、`offset`（`{x, y}`，画面比例，范围 −1–1）、`marks`（名字叠头像，见下） |
+| `cues[*].marks` | array | 名字叠头像，最多 16 项：`{text, occurrence, group}`；`text` 为选中的原文片段（1–32 字符、不含控制字符），`occurrence` 为它在该字幕文字中第几次出现（从 0 起），`group` 指向提供头像的分组；文字改动后对不上时忽略 |
+| `mark_defaults` | object | 名字头像样式：`size_em`（0.3–6，× 字号，默认 1.4）、`opacity`（0–100，默认 40）、`shape`、`radius`、`offset_y_em`（−3–3，× 字号）；始终画在文字后 |
 | `avatar_defaults` | object | 头像样式全局默认：`position`（`left`/`right`/`top`）、`gap_em`（0–4，× 字号）、`size_em`（0.2–6，× 字号）、`opacity`（0–100）、`shape`（`circle`/`rounded`/`square`）、`radius`（0–0.5，× 边长）、`layer`（`above`/`below`，文字前 / 后）、`shadow`（`enabled`、`color`、`opacity`、`blur`、`x`、`y`，后三者为 1080p 像素） |
 | `groups[].avatar_style` | object | 可选，分组覆盖；只含该分组单独设置的字段，其余跟随 `avatar_defaults` |
 | `assets` | object | 头像资源：id → `{mime, width, height, data}`，`mime` 为 `image/png`/`image/jpeg`/`image/webp`，`data` 为 base64（编辑器导入时缩放到最长边 ≤512px 并转 PNG）；`groups[].avatar` 引用其 id |

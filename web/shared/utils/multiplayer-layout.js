@@ -73,6 +73,124 @@ export function createUtilsModule(dependencies) {
     };
   }
 
+  // 名字叠头像的拆段排版（坐标相对于整条字幕的文字锚点 A，结果为 PlayRes 绝对坐标）：
+  // - 每一行单独成段，沿用整条字幕的对齐（\an1/\an2/\an3），底边贴在该行底线上；
+  // - 含名字的行再拆成「前文 / 名字 / 中间 / 名字 / 后文」：名字以 \an2 居中在算好的位置，
+  //   前文以 \an3 右缘贴住名字左缘，其余以 \an1 左缘贴住前一个名字右缘。
+  // 头像与名字共用同一个中心点，浏览器与 libass 的测宽差异只影响名字自身宽度带来的
+  // 一两个像素字距，不会在整行上累积；整条字幕的位置、拖动与命中框保持不变。
+  function splitMarkedCue(placed, marks, measure) {
+    const measurer = (run, text) => dependencies.assMeasureStackRun(placed.style, placed.fontSize, run, text, measure);
+    const layout = dependencies.assCanvasLayoutLines(placed.runs, measurer);
+    // 内容字符流（不含说话人前缀），行与行之间用换行分隔，记录每个字符所在的行与位置。
+    let content = '';
+    const where = [];
+    layout.lines.forEach((line, lineIndex) => {
+      if (lineIndex > 0) { content += '\n'; where.push(null); }
+      line.items.forEach((entry, itemIndex) => {
+        if (entry.run?.speakerColor) return;
+        [...entry.text].forEach((character, charIndex) => {
+          content += character;
+          where.push({ lineIndex, itemIndex, charIndex });
+        });
+      });
+    });
+    // content 按 UTF-16 拼接，where 按码点记录；统一转成码点数组再匹配。
+    const chars = [...content];
+    const found = [];
+    marks.forEach((mark) => {
+      const needle = [...mark.text];
+      let seen = -1;
+      for (let index = 0; index + needle.length <= chars.length; index += 1) {
+        if (!needle.every((character, offset) => chars[index + offset] === character)) continue;
+        seen += 1;
+        if (seen !== mark.occurrence) continue;
+        const span = where.slice(index, index + needle.length);
+        // 名字跨行（被自动折行切开）时不叠头像。
+        if (span.every(Boolean) && span.every((entry) => entry.lineIndex === span[0].lineIndex)) {
+          found.push({ mark, lineIndex: span[0].lineIndex, from: span[0], to: span[span.length - 1] });
+        }
+        break;
+      }
+    });
+    if (!found.length) return null;
+
+    const column = (placed.alignment - 1) % 3;
+    const anchor = placed.offset;
+    const fontSize = Math.max(1, Number(placed.fontSize) || 1);
+    const charX = (line, itemIndex, charIndex) => {
+      const entry = line.items[itemIndex];
+      return entry.x + (charIndex > 0 ? measurer(entry.run, [...entry.text].slice(0, charIndex).join('')).width : 0);
+    };
+    // 取一行中 [from, to) 位置的 run 片段（位置为 { itemIndex, charIndex }）。
+    const sliceRuns = (line, from, to) => {
+      const runs = [];
+      line.items.forEach((entry, itemIndex) => {
+        const characters = [...entry.text];
+        const start = itemIndex < from.itemIndex ? characters.length : itemIndex === from.itemIndex ? from.charIndex : 0;
+        const stop = itemIndex > to.itemIndex ? 0 : itemIndex === to.itemIndex ? to.charIndex : characters.length;
+        if (stop > start) runs.push({ ...entry.run, text: characters.slice(start, stop).join('') });
+      });
+      return runs;
+    };
+    // 片段不再各自携带整条字幕的头像；头像以 avatars 列表挂在片段上（坐标相对片段锚点），
+    // 整条字幕的头像只挂在第一个片段，名字头像挂在对应的名字片段。
+    const fragment = (runs, alignment, x, y) => ({ ...placed, runs, alignment, offset: { x, y },
+      rect: { left: placed.rect.left + anchor.x - x, right: placed.rect.right + anchor.x - x,
+        top: placed.rect.top + anchor.y - y, bottom: placed.rect.bottom + anchor.y - y },
+      avatar: null, avatars: [], multiplayerFragment: true });
+    const relative = (avatar, owner) => ({ ...avatar, x: avatar.x - owner.offset.x, y: avatar.y - owner.offset.y });
+
+    const fragments = [];
+    const avatars = [];
+    let bottom = -layout.blockHeight;
+    layout.lines.forEach((line, lineIndex) => {
+      const lineHeight = line.ascent + line.descent;
+      bottom += lineHeight;
+      if (!line.items.length) return;
+      const y = anchor.y + bottom;
+      const lineMarks = found.filter((entry) => entry.lineIndex === lineIndex)
+        .sort((left, right) => left.from.itemIndex - right.from.itemIndex || left.from.charIndex - right.from.charIndex);
+      if (!lineMarks.length) {
+        fragments.push(fragment(line.items.map((entry) => ({ ...entry.run, text: entry.text })), placed.alignment, anchor.x, y));
+        return;
+      }
+      const lineLeft = anchor.x + (column === 0 ? 0 : column === 1 ? -line.width / 2 : -line.width);
+      const begin = { itemIndex: 0, charIndex: 0 };
+      const finish = { itemIndex: line.items.length - 1, charIndex: [...line.items[line.items.length - 1].text].length };
+      let cursor = begin;
+      let previousRight = null;
+      lineMarks.forEach(({ mark, from, to }) => {
+        const after = { itemIndex: to.itemIndex, charIndex: to.charIndex + 1 };
+        const left = lineLeft + charX(line, from.itemIndex, from.charIndex);
+        const right = lineLeft + charX(line, after.itemIndex, after.charIndex);
+        if (previousRight !== null && left < previousRight) return; // 与前一个名字重叠时忽略
+        const center = (left + right) / 2;
+        const before = sliceRuns(line, cursor, from);
+        if (before.some((run) => run.text)) {
+          fragments.push(previousRight === null ? fragment(before, 3, left, y) : fragment(before, 1, previousRight, y));
+        }
+        const nameFragment = fragment(sliceRuns(line, from, after), 2, center, y);
+        fragments.push(nameFragment);
+        const size = Math.max(1, mark.style.size_em * fontSize);
+        const markAvatar = { assetId: mark.assetId, size, opacity: mark.style.opacity, shape: mark.style.shape,
+          radius: mark.style.radius, layer: 'below', shadow: null,
+          x: center - size / 2, y: y - lineHeight / 2 + mark.style.offset_y_em * fontSize - size / 2 };
+        avatars.push(markAvatar);
+        nameFragment.avatars.push(relative(markAvatar, nameFragment));
+        cursor = after;
+        previousRight = right;
+      });
+      const rest = sliceRuns(line, cursor, finish);
+      if (rest.some((run) => run.text)) fragments.push(fragment(rest, 1, previousRight, y));
+    });
+    if (placed.avatar && fragments.length) {
+      const absolute = { ...placed.avatar, x: anchor.x + placed.avatar.x, y: anchor.y + placed.avatar.y };
+      fragments[0].avatars.unshift(relative(absolute, fragments[0]));
+    }
+    return { fragments, avatars };
+  }
+
   /**
    * @param {{ items?: any[], data?: any, profile?: any, width?: number, height?: number, measure?: any }} [options]
    */
@@ -130,11 +248,19 @@ export function createUtilsModule(dependencies) {
         if (!slotTop || top < slotTop.top) slotTops.set(slot.id, { top, fontSize: cue.fontSize });
         const placed = { ...cue, alignment: box.alignment, offset: anchor, rect, textRect: box.textRect,
           absolute: true, sharedStackCue: true, multiplayer: { track, slot: slot.id }, avatar: box.avatar };
-        slice.items.push(placed);
+        slice.avatars = slice.avatars || [];
+        const timing = { start, end, cueStart: item.start, cueEnd: item.end, fad: item.fad };
         if (box.avatar) {
-          slice.avatars = slice.avatars || [];
-          slice.avatars.push({ start, end, cueStart: item.start, cueEnd: item.end, fad: item.fad,
-            ...box.avatar, x: anchor.x + box.avatar.x, y: anchor.y + box.avatar.y });
+          slice.avatars.push({ ...timing, ...box.avatar, x: anchor.x + box.avatar.x, y: anchor.y + box.avatar.y });
+        }
+        // 名字叠头像：把这条字幕拆成逐行、逐段的片段分别定位，头像以名字为中心垫在文字下方。
+        const marks = dependencies.resolveMultiplayerMarks(data, track, item.segment);
+        const split = marks.length ? splitMarkedCue(placed, marks, measure) : null;
+        if (split) {
+          slice.items.push(...split.fragments);
+          split.avatars.forEach((avatar) => slice.avatars.push({ ...timing, ...avatar }));
+        } else {
+          slice.items.push(placed);
         }
       }
       if (slice.diagnostic) {

@@ -20,6 +20,12 @@
     { key: 'shadow.blur', label: '阴影模糊（1080p 像素）', type: 'number', step: 1, min: 0, max: 100 },
     { key: 'shadow.x', label: '阴影 X（1080p 像素）', type: 'number', step: 1, min: -200, max: 200 },
     { key: 'shadow.y', label: '阴影 Y（1080p 像素）', type: 'number', step: 1, min: -200, max: 200 },
+    // 名字叠头像（只在「全局默认」中设置）。
+    { key: 'mark.size_em', label: '名字头像大小（× 字号）', type: 'number', step: 0.1, min: 0.3, max: 6, defaultsOnly: true },
+    { key: 'mark.opacity', label: '名字头像不透明度 %', type: 'number', step: 5, min: 0, max: 100, defaultsOnly: true },
+    { key: 'mark.shape', label: '名字头像形状', type: 'select', options: [['circle', '圆形'], ['rounded', '圆角'], ['square', '方形']], defaultsOnly: true },
+    { key: 'mark.radius', label: '名字头像圆角（× 边长）', type: 'number', step: 0.05, min: 0, max: 0.5, defaultsOnly: true },
+    { key: 'mark.offset_y_em', label: '名字头像垂直偏移（× 字号）', type: 'number', step: 0.05, min: -3, max: 3, defaultsOnly: true },
   ]);
 
   let scope = 'defaults';
@@ -95,8 +101,9 @@
       }
       const override = el('input', { type: 'checkbox', dataset: { avatarOverride: field.key }, title: '勾选后该分组单独设置此项；不勾选则跟随全局默认' });
       const overrideLabel = el('label', { className: 'mp-avatar-override' }, [override, document.createTextNode('覆盖')]);
-      grid.append(el('span', { className: 'mp-avatar-label', text: field.label }), control, overrideLabel);
-      controls[field.key] = { control, override, overrideLabel };
+      const labelEl = el('span', { className: 'mp-avatar-label', text: field.label });
+      grid.append(labelEl, control, overrideLabel);
+      controls[field.key] = { control, override, overrideLabel, labelEl, field };
     });
     const body = el('div', { className: 'mp-avatar-body' }, [scopes,
       el('div', { className: 'mp-avatar-editor' }, [title, imageRow, grid, hint])]);
@@ -134,6 +141,12 @@
 
   function applyField(key, value) {
     const mp = multiplayer();
+    if (key.startsWith('mark.')) {
+      mp.mutate('修改名字头像样式', (next) => {
+        next.mark_defaults = { ...(next.mark_defaults || {}), [key.slice(5)]: value };
+      }, { cueList: false });
+      return;
+    }
     mp.mutate('修改头像样式', (next) => {
       if (scope === 'defaults') {
         next.avatar_defaults = { ...(next.avatar_defaults || {}) };
@@ -222,8 +235,17 @@
     elements.hint.textContent = isGroup
       ? '勾选「覆盖」的项目只作用于此分组，其余跟随全局默认。头像与文字作为一个整体在槽位上居中。'
       : '这里的设置作用于所有分组；分组页可以单独覆盖。没有设置头像的分组不显示头像。';
+    const markStyle = mp.utils.normalizeMultiplayerMarkStyle(data.mark_defaults);
     FIELDS.forEach((field) => {
-      const { control, override: overrideInput, overrideLabel } = elements.controls[field.key];
+      const { control, override: overrideInput, overrideLabel, labelEl } = elements.controls[field.key];
+      if (field.defaultsOnly) {
+        control.hidden = isGroup;
+        labelEl.hidden = isGroup;
+        overrideLabel.hidden = true;
+        overrideLabel.style.display = isGroup ? 'none' : '';
+        writeControl(control, getPath({ mark: markStyle }, field.key));
+        return;
+      }
       const overridden = isGroup && getPath(override, field.key) !== undefined;
       writeControl(control, getPath(effective, field.key));
       overrideLabel.hidden = !isGroup;

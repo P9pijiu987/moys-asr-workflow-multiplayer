@@ -456,5 +456,6 @@ window.MAWE.register('utils-ass-canvas-layout', function createUtilsModule(depen
     // [multiplayer] 多人槽位排版复用同一套折行与包围盒测量。
     assStackWrappedRuns,
     assStackCueBounds,
+    assMeasureStackRun,
   });
 });
